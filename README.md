@@ -1,5 +1,11 @@
 # unattended-upgrades-install.sh
 
+**Para executar o script, use:**
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/unattended-upgrades-install.sh)" 
+```
+
+
 **Descrição:**  
 Script em bash para automatizar a instalação e configuração do sistema de atualizações automáticas (`unattended-upgrades`) no Ubuntu/Debian, incluindo notificações por e-mail utilizando Postfix via SMTP relay.
 
