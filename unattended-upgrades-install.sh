@@ -83,7 +83,8 @@ declare -A U20_SETTINGS=(
     ["Update-Package-Lists"]="\"1\""
     ["Download-Upgradeable-Packages"]="\"1\""
     ["AutocleanInterval"]="\"7\""
-    ["Unattended-Upgrade"]="\"1\""
+    # O controle de quando o Unattended Upgrade roda é feito vai cronjon, para mais controle
+    ["Unattended-Upgrade"]="\"0\""
 )
 touch "$U20"
 for key in "${!U20_SETTINGS[@]}"; do
