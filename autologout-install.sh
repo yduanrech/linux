@@ -15,16 +15,17 @@ fi
 ### 2. Criar o script em /etc/profile.d/ --------------------------------------
 cat > /etc/profile.d/autologout.sh <<'EOF'
 # /etc/profile.d/autologout.sh
-# Encerra shells Bash inativos após 5 min (300 s)
+# Encerra shells Bash inativos após 5min (300s)
 
-TMOUT=30          # 10 minutos
+TMOUT=900          # 15 minutos
 readonly TMOUT
 export TMOUT
 EOF
 
 ### 3. Permissões --------------------------------------------------------------
-# A leitura já basta, mas vamos seguir seu pedido (+x)
-chmod 755 /etc/profile.d/autologout.sh
+# Retirado por hora, pelos testes não se viu necessário
+#chmod 755 /etc/profile.d/autologout.sh
 
-echo "✅  Autologout configurado (TMOUT=600 s)."
+
+echo "✅  Autologout configurado (TMOUT=900s)."
 echo "   ➜  Abra um novo terminal ou faça logout/login para que todas as sessões peguem a configuração."
