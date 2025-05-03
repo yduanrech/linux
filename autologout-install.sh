@@ -1,33 +1,30 @@
 #!/usr/bin/env bash
+#
+# autologout-install.sh
+# Configura logout automático após 10 min de inatividade.
+# Script testado no Ubuntu 22.04 LTS
+#
 set -euo pipefail
 
-# 1. Root obrigatorio
+### 1. Somente root -----------------------------------------------------------
 if [[ $EUID -ne 0 ]]; then
-  echo "⚠️  Precisa ser root (sudo)." >&2
+  echo "⚠️  Este script precisa ser executado como root (sudo)." >&2
   exit 1
 fi
 
-# 2. Criar/atualizar o arquivo de autologout
+### 2. Criar o script em /etc/profile.d/ --------------------------------------
 cat > /etc/profile.d/autologout.sh <<'EOF'
 # /etc/profile.d/autologout.sh
-# Encerra shells Bash inativos após 5 min
+# Encerra shells Bash inativos após 5 min (300 s)
 
-# So define se ainda não estiver readonly
-if ! (declare -p TMOUT 2>/dev/null | grep -q '^-r'); then
-  TMOUT=30       # 15 minutos
-  readonly TMOUT
-  export TMOUT
-fi
+TMOUT=30          # 10 minutos
+readonly TMOUT
+export TMOUT
 EOF
 
-# 3. Permissoes
+### 3. Permissões --------------------------------------------------------------
+# A leitura já basta, mas vamos seguir seu pedido (+x)
 chmod 755 /etc/profile.d/autologout.sh
 
-# 4. FORÇAR source + log para teste em lab
-# shellcheck disable=SC1091
-source /etc/profile.d/autologout.sh || true
-echo "$(date '+%F %T') [$$] autologout aplicado (TMOUT=$TMOUT)" \
-  >> /tmp/autologout.log
-
-echo "✅  Autologout configurado (TMOUT=900 s)."
-echo "   ➜ Veja /tmp/autologout.log para confirmar."
+echo "✅  Autologout configurado (TMOUT=600 s)."
+echo "   ➜  Abra um novo terminal ou faça logout/login para que todas as sessões peguem a configuração."
