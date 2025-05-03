@@ -68,3 +68,64 @@ sudo unattended-upgrade -v
 - Testado no Ubuntu 22.04 LTS.
 
 ---
+
+
+# qemu-agent-install.sh
+
+**Para executar o script, use:**
+
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/qemu-agent-install.sh)"
+```
+
+**Descrição:**
+Script em bash para automatizar a instalação e configuração do QEMU Guest Agent no Ubuntu/Debian, permitindo uma integração aprimorada entre máquinas virtuais e o hipervisor Proxmox ou KVM.
+
+## Características
+
+* **Automação completa** para configurar:
+
+  * Atualização da lista de pacotes do sistema (`apt-get update`).
+  * Instalação do pacote:
+
+    * `qemu-guest-agent`
+  * Ativação e inicialização automática do serviço:
+
+    * Serviço `qemu-guest-agent`
+
+* **Facilidade de uso**:
+
+  * Mensagens claras e informativas durante o processo.
+  * Tratamento automático e eficiente de possíveis erros na instalação.
+
+* **Reinicialização programada**:
+
+  * Agendamento automático para reinicialização em 60 segundos após instalação.
+  * Aviso claro sobre como cancelar a reinicialização caso necessário.
+
+## Pós-execução
+
+Após a execução bem-sucedida do script, ocorrerá automaticamente:
+
+* Ativação imediata e persistente do serviço `qemu-guest-agent`.
+* Reinicialização agendada para aplicar corretamente as alterações necessárias.
+
+Você pode verificar o status do serviço com o comando:
+
+```bash
+systemctl status qemu-guest-agent
+```
+
+Para cancelar a reinicialização agendada, execute:
+
+```bash
+shutdown -c
+```
+
+## Compatibilidade
+
+* Testado no Ubuntu 22.04 LTS.
+
+---
+
+
