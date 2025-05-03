@@ -14,7 +14,7 @@ cat > /etc/profile.d/autologout.sh <<'EOF'
 
 # So define se ainda não estiver readonly
 if ! (declare -p TMOUT 2>/dev/null | grep -q '^-r'); then
-  TMOUT=900       # 15 minutos
+  TMOUT=30       # 15 minutos
   readonly TMOUT
   export TMOUT
 fi

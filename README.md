@@ -129,3 +129,8 @@ shutdown -c
 ---
 
 
+# autologout-install.sh
+
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/autologout-install.sh)"
+
+
