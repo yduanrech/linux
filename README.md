@@ -20,7 +20,7 @@ Script em bash para automatizar a instalação e configuração do sistema de at
   - Arquivos de configuração:
     - `50unattended-upgrades`
     - `20auto-upgrades`
-    - - `10periodic` (Criado automaticamente)
+    - `10periodic` (Criado automaticamente)
   - Agendamento diário do serviço de atualização (cron às `01:00`).
 
 - **Notificação automática por e-mail**:
@@ -124,13 +124,146 @@ shutdown -c
 
 ## Compatibilidade
 
-* Testado no Ubuntu 22.04 LTS.
+- Testado no Ubuntu 22.04 LTS.
 
 ---
 
 
 # autologout-install.sh
 
+**Para executar o script, use:**
+```
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/autologout-install.sh)"
+```
+
+**Descrição:**  
+Script em bash para automatizar a configuração de logout automático após um período de inatividade em servidores Linux, melhorando a segurança ao encerrar sessões ociosas.
+
+## Características
+
+* **Configuração automática de timeout**:
+  * Define TMOUT=900 (15 minutos de inatividade)
+  * Configura a variável como somente leitura para evitar que usuários desativem o recurso
+  * Implementa o recurso via `/etc/profile.d/`, aplicando-se a todos os usuários do sistema
+
+* **Segurança aprimorada**:
+  * Encerra automaticamente sessões de terminal inativas
+  * Reduz o risco de acessos não autorizados através de terminais abandonados
+  * Implementação limpa usando mecanismos padrão do sistema
+
+* **Facilidade de uso**:
+  * Instalação simples através de um único comando
+  * Não requer reinicialização do sistema
+
+## Pós-execução
+
+Após a execução bem-sucedida do script:
+
+* A configuração estará ativa para novas sessões de terminal
+* Usuários com sessões existentes precisarão fazer logout e login novamente para que a configuração seja aplicada
+* Todas as novas sessões de terminal serão automaticamente encerradas após 15 minutos de inatividade
+
+Você pode verificar se a configuração está ativa em sua sessão com o comando:
+
+```bash
+echo $TMOUT
+```
+
+## Compatibilidade
+
+- Testado no Ubuntu 22.04 LTS.
+
+---
+
+# initial-settings.sh
+
+**Para executar o script, use:**
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/initial-settings.sh)"
+```
+
+**Descrição:**  
+Script em bash para automatizar a configuração inicial de servidores Linux, definindo o fuso horário para São Paulo/Brasil e configurando o locale para pt_BR.UTF-8.
+
+## Características
+
+* **Automação completa** para configurar:
+
+  * Fuso horário:
+    * Configura para `America/Sao_Paulo`
+  
+  * Locale:
+    * Gera o locale `pt_BR.UTF-8`
+    * Define `pt_BR.UTF-8` como locale padrão do sistema
+
+* **Facilidade de uso**:
+
+  * Mensagens claras e informativas durante o processo
+  * Verificação de permissões para garantir execução como root
+
+## Pós-execução
+
+Após a execução bem-sucedida do script:
+
+* O sistema estará configurado com fuso horário de São Paulo/Brasil
+* O locale padrão será pt_BR.UTF-8
+
+Você pode verificar as configurações com os comandos:
+
+```bash
+# Verificar fuso horário
+timedatectl
+
+# Verificar locale
+locale
+```
+
+É recomendada a reinicialização do sistema para aplicar completamente todas as configurações.
+
+## Compatibilidade
+
+- Testado no Ubuntu 22.04 LTS.
+
+---
+
+# btop-install.sh
+
+**Para executar o script, use:**
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/btop-install.sh)"
+```
+
+**Descrição:**  
+Script em bash para automatizar a instalação do btop, um monitor avançado de sistema para Linux com interface TUI moderna e recursos completos de monitoramento de CPU, memória, discos e rede.
+
+## Características
+
+* **Detecção automática de arquitetura**:
+  * Suporte para arquiteturas x86_64 e aarch64/arm64
+  * Seleção automática do pacote correto para download
+
+* **Instalação completa**:
+  * Download da versão estável mais recente (v1.4.2)
+  * Extração e instalação via make
+  * Limpeza automática de arquivos temporários após instalação
+
+* **Tratamento de erros**:
+  * Verificação de permissões de administrador
+  * Validação de cada etapa do processo de instalação
+  * Mensagens informativas sobre o progresso
+
+## Pós-execução
+
+Após a execução bem-sucedida do script:
+
+* O btop estará instalado e pronto para uso
+* Você poderá iniciar o monitor de sistema digitando `btop` no terminal
+
+## Compatibilidade
+
+- Testado no Ubuntu 22.04 LTS.
+- Suporta arquiteturas x86_64 e aarch64/arm64.
+
+
 
 
