@@ -22,6 +22,11 @@ if [[ $EUID -ne 0 ]]; then
     error "Este script precisa ser executado como root (sudo)."
 fi
 
+# Instalar dependências
+log "Instalando dependências necessárias..."
+apt-get update -qq || error "Falha ao atualizar repositórios"
+apt-get install -y wget make bzip2 || error "Falha ao instalar dependências"
+
 # Detectar arquitetura
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -48,7 +53,7 @@ log "Baixando btop v${BTOP_VERSION}..."
 wget "$BTOP_URL" -O btop.tbz || error "Falha ao baixar btop"
 
 log "Extraindo arquivos..."
-tar -xf btop.tbz || error "Falha ao extrair arquivo"
+tar -xjf btop.tbz || error "Falha ao extrair arquivo"
 
 log "Instalando btop..."
 cd btop || error "Diretório btop não encontrado"
