@@ -73,3 +73,5 @@ log "Execute 'btop' para iniciar o monitor de sistema."
 # "sudo rm -f /usr/local/share/applications/btop.desktop"
 # "sudo rm -f /usr/local/share/icons/hicolor/48x48/apps/btop.png"
 # "sudo rm -f /usr/local/share/icons/hicolor/scalable/apps/btop.svg"
+# "hash -r" Limpa o cache do comando
+# "sudo rm -rf /usr/local/share/doc/btop"
