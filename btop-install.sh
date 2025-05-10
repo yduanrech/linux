@@ -59,3 +59,14 @@ cd / && rm -rf "$TMP_DIR"
 
 log "✅ btop v${BTOP_VERSION} instalado com sucesso!"
 log "Execute 'btop' para iniciar o monitor de sistema."
+
+
+# "Para desinstalar o btop no futuro, você tem duas opções:"
+# "Método 1 (baixando novamente e usando make uninstall):"
+# "  wget https://github.com/aristocratos/btop/releases/download/v${BTOP_VERSION}/btop-${ARCH_NAME}-linux-musl.tbz"
+# "  tar -xf btop-${ARCH_NAME}-linux-musl.tbz"
+# "  cd btop && sudo make uninstall"
+# ""
+# "Método 2 (remoção manual dos arquivos):"
+# "  sudo rm -f /usr/local/bin/btop"
+# "  sudo rm -rf /usr/local/share/btop"
