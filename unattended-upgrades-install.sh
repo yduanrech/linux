@@ -3,6 +3,8 @@
 # Configura unattended‑upgrades + update-notifier-common + envio por e-mail
 # Lê variáveis de /etc/unattend.conf e destrói o arquivo ao final
 # -------------------------------------------------------------------
+# v1.3
+#
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Execute como root."; exit 1; }
 export DEBIAN_FRONTEND=noninteractive

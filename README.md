@@ -183,7 +183,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 ```
 
 **Descrição:**  
-Script em bash para automatizar a configuração inicial de servidores Linux, definindo o fuso horário para São Paulo/Brasil e configurando o locale para pt_BR.UTF-8.
+Script em bash para automatizar a configuração inicial de servidores Linux, definindo o fuso horário para São Paulo/Brasil, configurando o locale para pt_BR.UTF-8 e implementando configurações de segurança SSH.
 
 ## Características
 
@@ -195,11 +195,16 @@ Script em bash para automatizar a configuração inicial de servidores Linux, de
   * Locale:
     * Gera o locale `pt_BR.UTF-8`
     * Define `pt_BR.UTF-8` como locale padrão do sistema
+    
+  * Segurança SSH:
+    * Opção para restringir login SSH do usuário root (permite apenas login com chaves)
+    * Configuração interativa com confirmação do usuário
+    * Reinício automático do serviço SSH para aplicar as alterações
 
 * **Facilidade de uso**:
-
   * Mensagens claras e informativas durante o processo
   * Verificação de permissões para garantir execução como root
+  * Processo interativo para decisões de segurança
 
 ## Pós-execução
 
@@ -207,6 +212,7 @@ Após a execução bem-sucedida do script:
 
 * O sistema estará configurado com fuso horário de São Paulo/Brasil
 * O locale padrão será pt_BR.UTF-8
+* Se selecionado, o login SSH para root será restrito apenas para autenticação com chaves
 
 Você pode verificar as configurações com os comandos:
 
@@ -216,6 +222,15 @@ timedatectl
 
 # Verificar locale
 locale
+
+# Verificar configurações SSH
+grep PermitRootLogin /etc/ssh/sshd_config
+```
+
+Para adicionar sua chave SSH pública ao servidor (caso tenha restringido login de root):
+
+```bash
+echo "SUA_CHAVE_SSH_PUBLICA" >> /root/.ssh/authorized_keys
 ```
 
 É recomendada a reinicialização do sistema para aplicar completamente todas as configurações.

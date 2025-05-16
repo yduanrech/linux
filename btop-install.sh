@@ -3,6 +3,7 @@
 # btop-install.sh
 # Instala o btop (monitor avançado de sistema) em servidores Linux
 # Script testado no Ubuntu/Debian
+# v1.5
 #
 set -euo pipefail
 

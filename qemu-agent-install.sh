@@ -3,6 +3,7 @@
 # autologout-install.sh
 # Instala o QEMU Agent na sua VM.
 # Script testado no Ubuntu 22.04 LTS
+# v1.0
 #
 
 set -euo pipefail

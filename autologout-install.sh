@@ -3,6 +3,7 @@
 # autologout-install.sh
 # Configura logout automático após 10 min de inatividade.
 # Script testado no Ubuntu 22.04 LTS
+# v1.0
 #
 set -euo pipefail
 
