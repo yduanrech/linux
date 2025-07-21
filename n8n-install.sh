@@ -4,18 +4,6 @@
 
 set -euo pipefail
 
-##### CONFIGURAÇÃO EXTERNA (opcional) #########################################
-CONF_FILE="/etc/n8n-install.conf"      # será carregado se existir e depois removido
-if [[ -f "$CONF_FILE" ]]; then
-  echo "[INFO] Lendo variáveis de $CONF_FILE"
-  set -a          # exporta tudo que for definido
-  . "$CONF_FILE"
-  set +a
-else
-  echo "[INFO] Arquivo $CONF_FILE não encontrado; usando autodetecção/defaults"
-fi
-###############################################################################
-
 ##### DETECÇÃO DE IP ##########################################################
 if [[ -z "${HOST_IP:-}" ]]; then
   HOST_IP="$(hostname -I | tr ' ' '\n' | grep -v '^127\.' | head -n1)"
@@ -36,6 +24,7 @@ WEBHOOK_URL="${WEBHOOK_URL:-${N8N_PROTOCOL}://${N8N_HOST}}"
 : "${N8N_RUNNERS_ENABLED:=true}"
 : "${N8N_SECURE_COOKIE:=false}"
 : "${N8N_DIAGNOSTICS_ENABLED:=false}"
+: "${N8N_RELEASE_TYPE:=stable}"
 ###############################################################################
 
 log() { printf '\e[1;34m[INFO]\e[0m %s\n' "$*"; }
