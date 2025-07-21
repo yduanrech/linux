@@ -295,42 +295,17 @@ Script em bash para instalar ou atualizar o n8n (plataforma de automação de wo
 ## Características
 
 - **Instalação e atualização automática** do n8n via npm global
-- **Configuração flexível** por arquivo externo `/etc/n8n-install.conf` (opcional e descartável)
-- **Detecção automática de IP** do servidor, caso não especificado
 - **Criação de usuário de serviço dedicado** (`n8n`) e diretórios de dados/logs
 - **Configuração automática do serviço systemd** para inicialização e gerenciamento
 - **Instalação automática do Node.js 22.x** caso não esteja presente
-- **Limpeza automática** do arquivo de configuração após uso, aumentando a segurança
 - **Mensagens informativas** durante todo o processo
-
-## Requisitos do arquivo auxiliar (`n8n-install.conf`)
-
-O arquivo auxiliar deve ser criado previamente em `/etc/n8n-install.conf` com permissões seguras (`chmod 600`), contendo, por exemplo:
-
-```bash
-# /etc/n8n-install.conf (chmod 600)
-GENERIC_TIMEZONE="America/Sao_Paulo"
-N8N_DEFAULT_LOCALE="pt_BR"
-HOST_IP="" # Deixe em branco para autodetecção
-N8N_PROTOCOL="http"
-# WEBHOOK_URL="http://meu.dominio.com" # (opcional)
-N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-N8N_RUNNERS_ENABLED=true
-N8N_SECURE_COOKIE=false
-N8N_DIAGNOSTICS_ENABLED=false
-```
-
-> **Importante:**
-> - O arquivo será removido automaticamente após a execução do script.
-> - Defina permissões restritas: `sudo chmod 600 /etc/n8n-install.conf`
 
 ## Pós-execução
 
 Após a execução bem-sucedida do script:
 
 - O serviço `n8n` estará instalado, ativo e configurado para iniciar automaticamente
-- O acesso estará disponível em `http://<IP_DO_SERVIDOR>:5678` (ou conforme configurado)
-- O arquivo de configuração `/etc/n8n-install.conf` será removido por segurança
+- O acesso estará disponível em `http://<IP_DO_SERVIDOR>:5678`
 - O serviço pode ser gerenciado via systemd:
   - `sudo systemctl status n8n`
   - `sudo systemctl restart n8n`
