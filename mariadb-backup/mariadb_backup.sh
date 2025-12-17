@@ -1,69 +1,70 @@
 #!/usr/bin/env bash
 # mariadb_backup.sh
-# Backup lógico (SQL) de databases selecionadas, cada uma em seu .sql.gz, com log e rotação.
+# Backup lógico de DBs selecionadas (um .sql.gz por DB) + envio opcional ao Proxmox Backup Server (PBS)
+# Configuração única em: /etc/mariadb-backup.conf
 
 set -euo pipefail
 umask 077
 
-# ====== CONFIG ======
-STORAGEDIR="${STORAGEDIR:-/srv/backup/mariadb}"
-LOGDIR="${LOGDIR:-/var/log/backup}"
-ROTATION_DAYS="${ROTATION_DAYS:-14}"
-DEFAULTS_FILE="${DEFAULTS_FILE:-/etc/mariadb/backup.cnf}"
+CONF="/etc/mariadb-backup.conf"
+if [ ! -r "$CONF" ]; then
+  echo "Error: config file not readable: $CONF"
+  exit 1
+fi
+# shellcheck disable=SC1090
+. "$CONF"
 
-# Coloque aqui as databases que você quer (separadas por espaço OU uma por linha)
-# Ex.: INCLUDEDB="erp financeiro site"
-# ou:
-# INCLUDEDB="
-# erp
-# financeiro
-# site
-# "
-INCLUDEDB="${INCLUDEDB:-}"
+# ---- validações mínimas ----
+: "${INCLUDEDB:?INCLUDEDB is required in $CONF}"
+: "${STORAGEDIR:=/srv/backup/mariadb}"
+: "${LOGDIR:=/var/log/backup}"
+: "${ROTATION_DAYS:=14}"
 
-# E-mail em erro (opcional)
-SENDMAIL="${SENDMAIL:-0}"
-MAILREC="${MAILREC:-}"
+: "${DB_HOST:=localhost}"
+: "${DB_PORT:=3306}"
+: "${DB_USER:?DB_USER is required in $CONF}"
+: "${DB_PASS:?DB_PASS is required in $CONF}"
 
-# ====== BINÁRIOS ======
+PBS_ENABLE="${PBS_ENABLE:-0}"
+PBS_BACKUP_TYPE="${PBS_BACKUP_TYPE:-host}"
+PBS_BACKUP_ID="${PBS_BACKUP_ID:-$(hostname -s)}"
+PBS_ARCHIVE_NAME="${PBS_ARCHIVE_NAME:-mariadb}"
+PBS_SOURCE_PATH="${PBS_SOURCE_PATH:-$STORAGEDIR}"
+PBS_REPOSITORY="${PBS_REPOSITORY:-}"
+PBS_PASSWORD="${PBS_PASSWORD:-}"
+PBS_FINGERPRINT="${PBS_FINGERPRINT:-}"
+
 MYSQL_BIN="$(command -v mariadb || command -v mysql)"
 DUMP_BIN="$(command -v mariadb-dump || command -v mysqldump)"
 GZIP_BIN="$(command -v gzip)"
-MAIL_BIN="$(command -v mail || true)"
+PBS_CLIENT_BIN="$(command -v proxmox-backup-client || true)"
 
-# ====== DATA / PATHS ======
 NOW="$(date -u +"%Y-%m-%dT%H%M%SZ")"
 DAY="$(date +"%Y-%m-%d")"
 BACKUPDIR="$STORAGEDIR/$DAY"
 LOGFILE="$LOGDIR/$DAY-mariadb-backup.log"
 TMPERR="/tmp/$DAY-mariadb-backup.tmp.log"
 
+cleanup() { rm -f "$TMPERR"; }
+trap cleanup EXIT
+
 mkdir -p "$BACKUPDIR" "$LOGDIR"
 exec &>"$LOGFILE"
 
 echo "Info: Starting backup at $(date '+%F %T')"
 echo "Info: BACKUPDIR=$BACKUPDIR"
-echo "Info: DEFAULTS_FILE=$DEFAULTS_FILE"
-echo "Info: dump bin=$DUMP_BIN"
+echo "Info: INCLUDEDB=$INCLUDEDB"
+echo "Info: DB_HOST=$DB_HOST DB_PORT=$DB_PORT DB_USER=$DB_USER"
 
-if [ ! -r "$DEFAULTS_FILE" ]; then
-  echo "Error: defaults file not readable: $DEFAULTS_FILE"
-  exit 1
-fi
+# conexão: usa MYSQL_PWD para não aparecer senha no ps (a senha fica no arquivo de config)
+export MYSQL_PWD="$DB_PASS"
 
-if [ -z "${INCLUDEDB//[[:space:]]/}" ]; then
-  echo "Error: INCLUDEDB está vazio. Defina quais databases serão salvas."
-  echo "Example: INCLUDEDB=\"erp financeiro\""
-  exit 1
-fi
+# testa conexão
+"$MYSQL_BIN" -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -NBe "SELECT 1;" 2>>"$TMPERR" >/dev/null
 
-# Testa conexão
-"$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" -NBe "SELECT 1;" 2>>"$TMPERR" >/dev/null
-
-# Função: checa se DB existe
 db_exists() {
   local db="$1"
-  "$MYSQL_BIN" --defaults-extra-file="$DEFAULTS_FILE" -NBe \
+  "$MYSQL_BIN" -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -NBe \
     "SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${db//\'/\'\'}';" \
     2>>"$TMPERR" | grep -qx "$db"
 }
@@ -83,7 +84,7 @@ for db in $INCLUDEDB; do
   OUTFILE="$BACKUPDIR/${db}_${NOW}.sql.gz"
   echo "Info: Dumping -> $OUTFILE"
 
-  if "$DUMP_BIN" --defaults-extra-file="$DEFAULTS_FILE" \
+  if "$DUMP_BIN" -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" \
       --databases "$db" \
       --single-transaction --quick \
       --routines --events --triggers \
@@ -107,28 +108,47 @@ done
 
 echo -e "\nInfo: Summary: OK=$OK_COUNT FAIL=$FAIL_COUNT"
 
-# Rotação só se não houve falha
+# Envio PBS (somente se tudo OK)
+if [ "$FAIL_COUNT" -eq 0 ] && [ "$PBS_ENABLE" = "1" ]; then
+  echo -e "\nInfo: PBS enabled."
+
+  if [ -z "$PBS_CLIENT_BIN" ]; then
+    echo "Error: proxmox-backup-client not found."
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  elif [ -z "$PBS_REPOSITORY" ] || [ -z "$PBS_PASSWORD" ]; then
+    echo "Error: PBS_REPOSITORY e PBS_PASSWORD precisam estar definidos em $CONF"
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+  else
+    PBS_BACKUP_ID="${PBS_BACKUP_ID// /_}"
+    PBS_ARCHIVE_NAME="$(echo -n "$PBS_ARCHIVE_NAME" | tr -c 'A-Za-z0-9_-' '_' )"
+
+    export PBS_REPOSITORY="$PBS_REPOSITORY"
+    export PBS_PASSWORD="$PBS_PASSWORD"
+    [ -n "$PBS_FINGERPRINT" ] && export PBS_FINGERPRINT
+
+    echo "Info: Uploading $PBS_SOURCE_PATH as ${PBS_ARCHIVE_NAME}.pxar"
+    echo "Info: PBS group: $PBS_BACKUP_TYPE/$PBS_BACKUP_ID"
+
+    if "$PBS_CLIENT_BIN" backup \
+        "${PBS_ARCHIVE_NAME}.pxar:${PBS_SOURCE_PATH}" \
+        --backup-type "$PBS_BACKUP_TYPE" \
+        --backup-id "$PBS_BACKUP_ID" \
+        2>>"$TMPERR"; then
+      echo "Info: PBS upload OK."
+    else
+      echo "Error: PBS upload FAILED."
+      FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+  fi
+fi
+
+# Rotação local (somente se tudo OK)
 if [ "$FAIL_COUNT" -eq 0 ]; then
   echo "Info: Rotating backups older than $ROTATION_DAYS day(s)"
   find "$STORAGEDIR" -type f -name "*.sql.gz" -mtime +"$ROTATION_DAYS" -delete
 else
-  echo "Error: Some backups failed; rotation skipped."
+  echo "Error: Some steps failed; rotation skipped."
 fi
 
 echo "Info: Done."
-
-# E-mail em erro (opcional)
-if [ "$SENDMAIL" = "1" ] && [ -n "$MAILREC" ] && [ -n "$MAIL_BIN" ]; then
-  if [ "$FAIL_COUNT" -ne 0 ] || grep -q 'Error' "$LOGFILE" || ( [ -s "$TMPERR" ] && grep -qiE 'error|denied|failed' "$TMPERR" ); then
-    {
-      echo "Host: $(hostname -f)"
-      echo "When: $(date '+%F %T')"
-      echo
-      echo "==== LOG ===="
-      cat "$LOGFILE"
-      echo
-      echo "==== STDERR ===="
-      [ -f "$TMPERR" ] && cat "$TMPERR" || true
-    } | "$MAIL_BIN" -s "$(hostname -f) - MariaDB backup error" "$MAILREC"
-  fi
-fi
+exit "$FAIL_COUNT"
