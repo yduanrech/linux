@@ -51,15 +51,17 @@ Script em bash para automatizar a instalação e configuração do sistema de at
 
 ## Requisitos do arquivo auxiliar (`unattend.conf`)
 
-O arquivo auxiliar deve ser criado previamente em `/etc/unattend.conf` com permissões seguras (`chmod 600`), contendo as seguintes variáveis:
-
 ```bash
+sudo bash -c 'cat > /etc/unattend.conf <<EOF
 MAIL_TO="email@destino.com"
 GENERIC_FROM="email@remetente.com"
 RELAY="smtp.servidor.com:465"
-SMTP_USER="usuario_smtp" # Geralmente usuario@dominio.com.br
-SMTP_PASS="senha_smtp" # Recomendasse usar senha de aplicativo
+SMTP_USER="usuario_smtp"
+SMTP_PASS="senha_smtp"
+EOF
+chmod 600 /etc/unattend.conf'
 ```
+
 
 ## Pós-execução
 
