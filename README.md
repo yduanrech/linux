@@ -5,27 +5,44 @@
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/unattended-upgrades-install.sh)" 
 ```
 
+**Para executar sem configuração de email:**
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/unattended-upgrades-install.sh)" -- --skip-email
+```
+
 
 **Descrição:**  
-Script em bash para automatizar a instalação e configuração do sistema de atualizações automáticas (`unattended-upgrades`) no Ubuntu/Debian, incluindo notificações por e-mail utilizando Postfix via SMTP relay.
+Script em bash para automatizar a instalação e configuração do sistema de atualizações automáticas (`unattended-upgrades`) no Ubuntu/Debian, com opção de notificações por e-mail utilizando Postfix via SMTP relay.
+
+## Parâmetros
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `--skip-email` ou `-y` | Ignora o arquivo de configuração e instala sem notificações por email |
+| `-h` ou `--help` | Exibe ajuda |
 
 ## Características
 
 - **Automação completa** para configurar:
   - Pacotes essenciais:
     - `unattended-upgrades`
-    - `postfix`
-    - `mailutils`
+    - `postfix` (apenas com email)
+    - `mailutils` (apenas com email)
     - `update-notifier-common`
   - Arquivos de configuração:
     - `50unattended-upgrades`
     - `20auto-upgrades`
-    - `10periodic` (Criado automaticamente)
   - Agendamento diário do serviço de atualização (cron às `01:00`).
 
-- **Notificação automática por e-mail**:
+- **Notificação automática por e-mail** (opcional):
   - Notifica sobre atualizações realizadas ou erros encontrados durante o processo.
   - Utiliza servidor SMTP externo para envio.
+
+- **Re-verificação de arquivo de configuração**:
+  - Se o arquivo `/etc/unattend.conf` não for encontrado, o script oferece:
+    - `[Y]` Continuar sem email
+    - `[R]` Re-verificar (permite criar o arquivo em outro terminal)
+    - `[N]` Cancelar
 
 - **Segurança aprimorada**:
   - Usa variáveis externas através de um arquivo de configuração `/etc/unattend.conf`.
@@ -183,55 +200,48 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 ```
 
 **Descrição:**  
-Script em bash para automatizar a configuração inicial de servidores Linux, definindo o fuso horário para São Paulo/Brasil, configurando o locale para pt_BR.UTF-8 e implementando configurações de segurança SSH.
+Script em bash com menu interativo para automatizar a configuração inicial de servidores Linux.
+
+## Menu de Opções
+
+```
+═══════════════════════════════════════
+    CONFIGURAÇÕES INICIAIS LINUX
+═══════════════════════════════════════
+
+ Configurações Básicas:
+   1) Fuso horário, locale e SSH
+   2) Limitar uso do journald
+   3) Configurar autologout (15 min)
+
+ Atualizações Automáticas:
+   4) Unattended-upgrades (com email)
+   5) Unattended-upgrades (sem email)
+
+ Executar Múltiplas:
+   A) TODAS as opções (1-5, upgrades sem email)
+   0) Sair
+```
 
 ## Características
 
-* **Automação completa** para configurar:
+* **Configurações Básicas:**
+  * Fuso horário: `America/Sao_Paulo`
+  * Locale: `pt_BR.UTF-8`
+  * Segurança SSH: Opção para permitir/restringir login root
 
-  * Fuso horário:
-    * Configura para `America/Sao_Paulo`
-  
-  * Locale:
-    * Gera o locale `pt_BR.UTF-8`
-    * Define `pt_BR.UTF-8` como locale padrão do sistema
-    
-  * Segurança SSH:
-    * Opção para restringir login SSH do usuário root (permite apenas login com chaves)
-    * Configuração interativa com confirmação do usuário
-    * Reinício automático do serviço SSH para aplicar as alterações
+* **Limites do Journald:**
+  * `SystemMaxUse=300M`
+  * `MaxRetentionSec=1month`
 
-* **Facilidade de uso**:
-  * Mensagens claras e informativas durante o processo
-  * Verificação de permissões para garantir execução como root
-  * Processo interativo para decisões de segurança
+* **Autologout:**
+  * Encerra sessões inativas após 15 minutos
+
+* **Atualizações Automáticas:**
+  * Integração com `unattended-upgrades-install.sh`
+  * Opção com email (requer `/etc/unattend.conf`) ou sem email
 
 ## Pós-execução
-
-Após a execução bem-sucedida do script:
-
-* O sistema estará configurado com fuso horário de São Paulo/Brasil
-* O locale padrão será pt_BR.UTF-8
-* Se selecionado, o login SSH para root será restrito apenas para autenticação com chaves
-
-Você pode verificar as configurações com os comandos:
-
-```bash
-# Verificar fuso horário
-timedatectl
-
-# Verificar locale
-locale
-
-# Verificar configurações SSH
-grep PermitRootLogin /etc/ssh/sshd_config
-```
-
-Para adicionar sua chave SSH pública ao servidor (caso tenha restringido login de root):
-
-```bash
-echo "SUA_CHAVE_SSH_PUBLICA" >> /root/.ssh/authorized_keys
-```
 
 É recomendada a reinicialização do sistema para aplicar completamente todas as configurações.
 

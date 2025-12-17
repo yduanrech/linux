@@ -58,21 +58,49 @@ else
     echo "Aviso: $CONF_FILE não encontrado. Continuando sem configuração de email..."
     CONFIGURE_EMAIL=false
   else
-    echo "Aviso: $CONF_FILE não encontrado."
-    echo "O arquivo de configuração contém as credenciais SMTP para notificações por email."
-    echo ""
-    read -rp "Deseja continuar sem configuração de email? (s/N): " resposta
-    case "$resposta" in
-      [sS]|[sS][iI][mM])
-        echo "Continuando sem configuração de email..."
-        CONFIGURE_EMAIL=false
-        ;;
-      *)
-        echo "Operação cancelada. Crie o arquivo $CONF_FILE com as variáveis:" >&2
-        echo "  MAIL_TO, GENERIC_FROM, RELAY, SMTP_USER, SMTP_PASS" >&2
-        exit 1
-        ;;
-    esac
+    # Loop para permitir re-verificação do arquivo
+    while true; do
+      echo ""
+      echo "Aviso: $CONF_FILE não encontrado."
+      echo "O arquivo de configuração contém as credenciais SMTP para notificações por email."
+      echo ""
+      echo "Opções:"
+      echo "  [Y] Continuar sem configuração de email"
+      echo "  [R] Re-verificar (aguardo você criar o arquivo)"
+      echo "  [N] Cancelar"
+      echo ""
+      read -rp "Digite sua opção (y/r/N): " resposta
+      case "$resposta" in
+        [yY])
+          echo "Continuando sem configuração de email..."
+          CONFIGURE_EMAIL=false
+          break
+          ;;
+        [rR])
+          echo "Re-verificando..."
+          if [[ -f "$CONF_FILE" ]]; then
+            echo "✅ Arquivo encontrado! Carregando configurações..."
+            source "$CONF_FILE"
+            # Valida variáveis obrigatórias
+            for var in MAIL_TO GENERIC_FROM RELAY SMTP_USER SMTP_PASS; do
+              if [[ -z "${!var:-}" ]]; then
+                echo "Erro: variável $var não definida em $CONF_FILE" >&2
+                exit 1
+              fi
+            done
+            CONFIGURE_EMAIL=true
+            break
+          else
+            echo "⚠️ Arquivo ainda não encontrado. Tente novamente."
+          fi
+          ;;
+        *)
+          echo "Operação cancelada. Crie o arquivo $CONF_FILE com as variáveis:" >&2
+          echo "  MAIL_TO, GENERIC_FROM, RELAY, SMTP_USER, SMTP_PASS" >&2
+          exit 1
+          ;;
+      esac
+    done
   fi
 fi
 
