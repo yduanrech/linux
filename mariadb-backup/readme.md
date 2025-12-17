@@ -1,6 +1,6 @@
 # Backup MariaDB — Databases selecionadas (um .sql.gz por DB)
 
-Este guia descreve como usar o script `backup_mariadb.sh` para fazer **backup lógico** (SQL) de **apenas algumas databases**, salvando **arquivos separados** (`.sql.gz`) por database, com **logs** e **rotação**.
+Este guia descreve como usar o script `mariadb_backup.sh` para fazer **backup lógico** (SQL) de **apenas algumas databases**, salvando **arquivos separados** (`.sql.gz`) por database, com **logs** e **rotação**.
 
 ---
 
@@ -18,7 +18,7 @@ Este guia descreve como usar o script `backup_mariadb.sh` para fazer **backup l�
 
 ## Caminhos padrão
 
-- Script: `/usr/local/sbin/backup_mariadb.sh`
+- Script: `/usr/local/sbin/mariadb_backup.sh`
 - Credenciais: `/etc/mariadb/backup.cnf`
 - Backups: `/srv/backup/mariadb/YYYY-MM-DD/`
 - Logs: `/var/log/backup/YYYY-MM-DD-mariadb-backup.log`
@@ -134,14 +134,14 @@ mariadb --defaults-extra-file=/etc/mariadb/backup.cnf -e "SELECT CURRENT_USER(),
 1. Salve o script em:
 
 ```bash
-sudo nano /usr/local/sbin/backup_mariadb.sh
+sudo nano /usr/local/sbin/mariadb_backup.sh
 ```
 
 2. Permissões:
 
 ```bash
-sudo chmod 750 /usr/local/sbin/backup_mariadb.sh
-sudo chown root:root /usr/local/sbin/backup_mariadb.sh
+sudo chmod 750 /usr/local/sbin/mariadb_backup.sh
+sudo chown root:root /usr/local/sbin/mariadb_backup.sh
 ```
 
 3. Pastas (opcional):
@@ -161,7 +161,7 @@ O **cron roda com ambiente mínimo** (quase sem variáveis). Ao colocar variáve
 Exemplo:
 
 ```cron
-0 2 * * * root INCLUDEDB="erp financeiro site" ROTATION_DAYS=14 /usr/local/sbin/backup_mariadb.sh
+0 2 * * * root INCLUDEDB="erp financeiro site" ROTATION_DAYS=14 /usr/local/sbin/mariadb_backup.sh
 ```
 
 ### Vantagens
@@ -203,7 +203,7 @@ No começo do script (logo após o `umask 077`), adicione:
 ### 3) Cron fica “limpo”
 
 ```cron
-0 2 * * * root /usr/local/sbin/backup_mariadb.sh
+0 2 * * * root /usr/local/sbin/mariadb_backup.sh
 ```
 
 ---
@@ -213,13 +213,13 @@ No começo do script (logo após o `umask 077`), adicione:
 Com variáveis na linha:
 
 ```bash
-sudo INCLUDEDB="erp financeiro site" /usr/local/sbin/backup_mariadb.sh
+sudo INCLUDEDB="erp financeiro site" /usr/local/sbin/mariadb_backup.sh
 ```
 
 Ou usando `/etc/default` (se você aplicou o include no script):
 
 ```bash
-sudo /usr/local/sbin/backup_mariadb.sh
+sudo /usr/local/sbin/mariadb_backup.sh
 ```
 
 ---

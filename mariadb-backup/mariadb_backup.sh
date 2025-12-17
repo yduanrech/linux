@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# backup_mariadb_selected_dbs.sh
+# mariadb_backup.sh
 # Backup lógico (SQL) de databases selecionadas, cada uma em seu .sql.gz, com log e rotação.
 
 set -euo pipefail
