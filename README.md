@@ -221,7 +221,7 @@ Script em bash com menu interativo para automatizar a configuração inicial de 
    5) Unattended-upgrades (sem email)
 
  Executar Múltiplas:
-   A) TODAS as opções (1-5, upgrades sem email)
+   A) TODAS as opções (1-5, upgrades com email)
    0) Sair
 ```
 
