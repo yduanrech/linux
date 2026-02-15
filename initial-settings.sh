@@ -222,8 +222,11 @@ unattended_upgrades() {
   )
 
   if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
+      local MAIL_SENDER_VALUE="${MAIL_SENDER:-${GENERIC_FROM}}"
+      local MAIL_SENDER_ESCAPED="${MAIL_SENDER_VALUE//\"/\\\"}"
       U50_SETTINGS["Mail"]="\"${MAIL_TO}\""
       U50_SETTINGS["MailReport"]="\"on-change\""
+      U50_SETTINGS["Sender"]="\"${MAIL_SENDER_ESCAPED}\""
   fi
 
   for key in "${!U50_SETTINGS[@]}"; do
@@ -290,6 +293,8 @@ EOF
     HOST_FQDN=$(hostname -f)
     HOST_SHORT=$(hostname -s)
     cat > /etc/postfix/generic <<EOF
+root                          ${GENERIC_FROM}
+root@${HOST_SHORT}            ${GENERIC_FROM}
 root@${HOST_FQDN}           ${GENERIC_FROM}
 root@${HOST_SHORT}.localdomain  ${GENERIC_FROM}
 EOF
