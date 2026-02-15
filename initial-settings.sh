@@ -22,7 +22,7 @@ config_inicial() {
   update-locale LANG=pt_BR.UTF-8 LC_ALL=pt_BR.UTF-8
 
   echo "[4/4] Configurando segurança SSH..."
-  read -p "Deseja permitir o login SSH com senha para o usuário root? (s/n): " permitir_ssh
+  read -r -p "Deseja permitir o login SSH com senha para o usuário root? (s/n): " permitir_ssh
   if [[ "$permitir_ssh" =~ ^[Ss]$ ]]; then
     SSH_CONFIG="/etc/ssh/sshd_config"
     if [[ -f "$SSH_CONFIG" ]]; then
@@ -116,6 +116,7 @@ unattended_upgrades() {
   
   # Carrega configurações
   if [[ -f "$CONF_FILE" ]]; then
+    # shellcheck source=/etc/unattend.conf
     source "$CONF_FILE"
     
     # Valida variáveis obrigatórias
@@ -152,6 +153,7 @@ unattended_upgrades() {
             echo "Re-verificando..."
             if [[ -f "$CONF_FILE" ]]; then
               echo "✅ Arquivo encontrado! Carregando configurações..."
+              # shellcheck source=/etc/unattend.conf
               source "$CONF_FILE"
               # Valida variáveis obrigatórias
               for var in MAIL_TO GENERIC_FROM RELAY SMTP_USER SMTP_PASS; do
@@ -283,8 +285,10 @@ EOF
     postmap /etc/postfix/sasl_passwd && shred -u /etc/postfix/sasl_passwd
 
     echo "[5/8] Criando generic map para remetentes..."
-    local HOST_FQDN=$(hostname -f)
-    local HOST_SHORT=$(hostname -s)
+    local HOST_FQDN
+    local HOST_SHORT
+    HOST_FQDN=$(hostname -f)
+    HOST_SHORT=$(hostname -s)
     cat > /etc/postfix/generic <<EOF
 root@${HOST_FQDN}           ${GENERIC_FROM}
 root@${HOST_SHORT}.localdomain  ${GENERIC_FROM}
