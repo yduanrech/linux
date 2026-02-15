@@ -190,10 +190,15 @@ done
 # 8) Configura Postfix (SMTP Relay) - apenas se configurando email
 if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
   echo "[4/8] Configurando Postfix (SMTP Relay)..."
+  SMTP_TLS_WRAPPERMODE="no"
+  if [[ "$RELAY_PORT" == "465" ]]; then
+    SMTP_TLS_WRAPPERMODE="yes"
+  fi
+
   postconf -e \
       "relayhost = [${RELAY_HOST}]:${RELAY_PORT}" \
       "smtp_use_tls = yes" \
-      "smtp_tls_wrappermode = yes" \
+      "smtp_tls_wrappermode = ${SMTP_TLS_WRAPPERMODE}" \
       "smtp_tls_security_level = encrypt" \
       "smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt" \
       "smtp_sasl_auth_enable = yes" \

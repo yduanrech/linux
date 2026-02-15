@@ -62,6 +62,26 @@ EOF
 chmod 600 /etc/unattend.conf'
 ```
 
+### Exemplo com ZeptoMail
+
+Para ZeptoMail, você pode usar `587` (STARTTLS) ou `465` (SSL wrapper). Exemplo com `587`:
+
+```bash
+sudo bash -c 'cat > /etc/unattend.conf <<EOF
+MAIL_TO="email@destino.com"
+GENERIC_FROM="email@remetente.com"
+RELAY="smtp.zeptomail.com:587"
+SMTP_USER="emailapikey"
+SMTP_PASS="sua_senha_ou_token"
+EOF
+chmod 600 /etc/unattend.conf'
+```
+
+Observação:
+- O script detecta a porta em `RELAY` e ajusta TLS automaticamente:
+- `465`: SSL (`smtp_tls_wrappermode = yes`)
+- `587` (ou `25`): STARTTLS (`smtp_tls_wrappermode = no`)
+
 
 ## Pós-execução
 
@@ -70,10 +90,16 @@ Após a execução bem-sucedida do script, ocorrerá automaticamente:
 - Exclusão permanente e segura (`shred`) do arquivo `/etc/unattend.conf`.
 - Habilitação e ativação imediata do serviço `unattended-upgrades`.
 
-Você pode testar o envio de e-mails pelo postfix com o comando:
+Você pode testar o envio de e-mails pelo Postfix com o comando:
 
 ```bash
-echo "E-mail de teste $(date)" | mail -s "Teste e-mail $(hostname -s) $(date)" email@empresa.net.br
+printf "Subject: Teste ZeptoMail\n\nTeste de envio via Postfix em $(date)\n" | sendmail -v email@empresa.net.br
+```
+
+Opcionalmente, para validar no log:
+
+```bash
+sudo tail -n 100 /var/log/mail.log
 ```
 
 Para executar os updates pode se utilizar o comando:
@@ -242,6 +268,7 @@ Script em bash com menu interativo para automatizar a configuração inicial de 
 * **Atualizações Automáticas:**
   * Integração com `unattended-upgrades-install.sh`
   * Opção com email (requer `/etc/unattend.conf`) ou sem email
+  * Compatível com relay SMTP genérico (ex.: ZeptoMail com `smtp.zeptomail.com:465` e `SMTP_USER="emailapikey"`)
 
 ## Pós-execução
 
