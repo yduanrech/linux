@@ -77,16 +77,16 @@ Options:
   -h, --help   Show this help message
 
 Option numbers (can be combined):
-  1   Timezone, locale, and SSH
-  2   Limit journald usage
-  3   Configure autologout (15 min)
-  4   Unattended-upgrades (asks about email interactively)
-  A   All options (1-4)
+  1   Full setup (runs 2-5)
+  2   Timezone, locale, and SSH
+  3   Limit journald usage
+  4   Configure autologout (15 min)
+  5   Unattended-upgrades (asks about email interactively)
 
 Examples:
   $(basename "$0")              # Interactive menu
-  $(basename "$0") 1 3          # Run options 1 and 3
-  $(basename "$0") --dry-run A  # Dry-run all options
+  $(basename "$0") 2 4          # Run options 2 and 4
+  $(basename "$0") --dry-run 1  # Dry-run full setup
 EOF
 }
 
@@ -400,16 +400,16 @@ EOF
 run_option() {
   local opcao="$1"
   case "$opcao" in
-    1) config_inicial ;;
-    2) limitar_journald ;;
-    3) autologout_config ;;
-    4) unattended_upgrades ;;
-    [aA])
+    1)
       config_inicial
       limitar_journald
       autologout_config
       unattended_upgrades
       ;;
+    2) config_inicial ;;
+    3) limitar_journald ;;
+    4) autologout_config ;;
+    5) unattended_upgrades ;;
     0) show_summary; log "Exiting..."; exit 0 ;;
     *) echo "Invalid option: $opcao" ;;
   esac
@@ -424,16 +424,12 @@ menu() {
     [[ "$DRY_RUN" == "true" ]] && echo "           [DRY-RUN MODE]"
     echo "═══════════════════════════════════════"
     echo ""
-    echo " Basic Setup:"
-    echo "   1) Timezone, locale, and SSH"
-    echo "   2) Limit journald usage"
-    echo "   3) Configure autologout (15 min)"
-    echo ""
-    echo " Automatic Updates:"
-    echo "   4) Unattended-upgrades"
-    echo ""
-    echo " Run Multiple:"
-    echo "   A) ALL options (1-4)"
+    echo " ➜ 1) Full setup (runs 2-5)"
+    echo "   ─────────────────────────────────"
+    echo "   2) Timezone, locale, and SSH"
+    echo "   3) Limit journald usage"
+    echo "   4) Configure autologout (15 min)"
+    echo "   5) Unattended-upgrades"
     echo "   0) Exit"
     echo ""
     read -rp " Select option(s) separated by space: " opcoes
