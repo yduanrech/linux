@@ -4,11 +4,11 @@
 # Interactive menu for initial Linux server setup
 # Includes: timezone, locale, SSH, journald, autologout, unattended-upgrades
 # Tested on Ubuntu/Debian
-# v2.0
+# v2.1
 #
 set -euo pipefail
 
-VERSION="2.0"
+VERSION="2.1"
 LOG_FILE="/var/log/initial-settings.log"
 DRY_RUN=false
 SUMMARY=()
@@ -21,21 +21,33 @@ log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE" 2>/dev/null || true
 }
 
-# Safe config file loader (does not execute code, only reads key=value pairs)
-safe_load_conf() {
-  local conf_file="$1"
-  while IFS='=' read -r key value; do
-    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-    read -r key <<< "$key"
-    read -r value <<< "$value"
-    value="${value#\"}" ; value="${value%\"}"
-    value="${value#\'}" ; value="${value%\'}"
-    case "$key" in
-      MAIL_TO|GENERIC_FROM|RELAY|SMTP_USER|SMTP_PASS|MAIL_SENDER)
-        declare -g "$key=$value"
-        ;;
-    esac
-  done < "$conf_file"
+# Prompt for non-empty input
+prompt_required() {
+  local prompt_text="$1"
+  local var_name="$2"
+  local input=""
+  while [[ -z "$input" ]]; do
+    read -rp "$prompt_text" input
+    if [[ -z "$input" ]]; then
+      echo "  ⚠️  This field is required."
+    fi
+  done
+  declare -g "$var_name=$input"
+}
+
+# Prompt for password (hidden input)
+prompt_password() {
+  local prompt_text="$1"
+  local var_name="$2"
+  local input=""
+  while [[ -z "$input" ]]; do
+    read -rsp "$prompt_text" input
+    echo ""
+    if [[ -z "$input" ]]; then
+      echo "  ⚠️  This field is required."
+    fi
+  done
+  declare -g "$var_name=$input"
 }
 
 # Display summary of completed actions
@@ -68,9 +80,8 @@ Option numbers (can be combined):
   1   Timezone, locale, and SSH
   2   Limit journald usage
   3   Configure autologout (15 min)
-  4   Unattended-upgrades (with email)
-  5   Unattended-upgrades (without email)
-  A   All options (1-5)
+  4   Unattended-upgrades (asks about email interactively)
+  A   All options (1-4)
 
 Examples:
   $(basename "$0")              # Interactive menu
@@ -187,83 +198,45 @@ EOF
 }
 
 # Function: Install unattended-upgrades
-# Parameter: SKIP_EMAIL (true/false)
 unattended_upgrades() {
-  local SKIP_EMAIL="${1:-false}"
-  local CONFIGURE_EMAIL=true
-  local CONF_FILE=/etc/unattend.conf
+  local CONFIGURE_EMAIL=false
+  local MAIL_TO="" GENERIC_FROM="" RELAY="" SMTP_USER="" SMTP_PASS="" MAIL_SENDER=""
 
   log ""
   log "[UNATTENDED-UPGRADES] Configurando atualizações automáticas..."
 
-  # Load configuration safely
-  if [[ -f "$CONF_FILE" ]]; then
-    safe_load_conf "$CONF_FILE"
+  # Ask about email notifications
+  read -rp "Configure email notifications for updates? (y/n): " want_email
+  if [[ "$want_email" =~ ^[Yy]$ ]]; then
+    CONFIGURE_EMAIL=true
+    echo ""
+    echo "  SMTP Configuration"
+    echo "  ─────────────────────────────────────"
+    echo "  Example: smtp.gmail.com:587"
+    echo ""
+    prompt_required "  SMTP relay (host:port): " RELAY
+    prompt_required "  SMTP username: " SMTP_USER
+    prompt_password "  SMTP password: " SMTP_PASS
+    prompt_required "  Recipient email (e.g. admin@example.com): " MAIL_TO
+    prompt_required "  Sender/From email (e.g. server@example.com): " GENERIC_FROM
+    read -rp "  Custom sender address (Enter to use $GENERIC_FROM): " MAIL_SENDER
+    MAIL_SENDER="${MAIL_SENDER:-$GENERIC_FROM}"
 
-    # Validate required variables
-    for var in MAIL_TO GENERIC_FROM RELAY SMTP_USER SMTP_PASS; do
-      if [[ -z "${!var:-}" ]]; then
-        log "Error: variable $var not defined in $CONF_FILE" >&2
-        return 1
-      fi
-    done
-  else
-    if [[ "$SKIP_EMAIL" == "true" ]]; then
-      log "Warning: $CONF_FILE not found. Continuing without email configuration..."
+    echo ""
+    echo "  ─────────────────────────────────────"
+    echo "  SMTP Relay:  $RELAY"
+    echo "  Username:    $SMTP_USER"
+    echo "  Password:    ********"
+    echo "  Send to:     $MAIL_TO"
+    echo "  Send from:   $GENERIC_FROM"
+    echo "  Sender:      $MAIL_SENDER"
+    echo "  ─────────────────────────────────────"
+    read -rp "  Confirm SMTP settings? (y/n): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      log "⚠️ SMTP configuration cancelled."
       CONFIGURE_EMAIL=false
-    else
-      # Loop to allow re-checking the file
-      while true; do
-        echo ""
-        log "Warning: $CONF_FILE not found."
-        echo "This config file contains SMTP credentials for email notifications."
-        echo ""
-        echo "Options:"
-        echo "  [Y] Continue without email"
-        echo "  [R] Re-check (waiting for you to create the file)"
-        echo "  [N] Cancel"
-        echo ""
-        read -rp "Choose an option (y/r/N): " resposta
-        case "$resposta" in
-          [yY])
-            log "Continuing without email configuration..."
-            CONFIGURE_EMAIL=false
-            break
-            ;;
-          [rR])
-            log "Re-checking..."
-            if [[ -f "$CONF_FILE" ]]; then
-              log "✅ File found! Loading configuration..."
-              safe_load_conf "$CONF_FILE"
-              # Validate required variables
-              for var in MAIL_TO GENERIC_FROM RELAY SMTP_USER SMTP_PASS; do
-                if [[ -z "${!var:-}" ]]; then
-                  log "Error: variable $var not defined in $CONF_FILE" >&2
-                  return 1
-                fi
-              done
-              CONFIGURE_EMAIL=true
-              break
-            else
-              log "⚠️ File still not found. Try again."
-            fi
-            ;;
-          *)
-            log "Operation cancelled." >&2
-            return 1
-            ;;
-        esac
-      done
     fi
   fi
-
-  # Prepare safe cleanup of CONF_FILE
-  cleanup_conf() {
-    if [[ -f "$CONF_FILE" ]]; then
-      shred -u "$CONF_FILE" 2>/dev/null || rm -f "$CONF_FILE"
-    fi
-  }
-  trap cleanup_conf EXIT
 
   # Split host and port from RELAY
   local RELAY_HOST=""
@@ -290,7 +263,6 @@ unattended_upgrades() {
     else
       SUMMARY+=("Unattended-upgrades without email (dry-run)")
     fi
-    trap - EXIT
     return 0
   fi
 
@@ -414,10 +386,6 @@ EOF
   log "[7/8] Habilitando serviço unattended-upgrades..."
   systemctl enable --now unattended-upgrades
 
-  # Clean up config file
-  cleanup_conf
-  trap - EXIT
-
   log "[8/8] ✅ Unattended-upgrades configurado com sucesso!"
   if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
     SUMMARY+=("Unattended-upgrades (with email)")
@@ -435,13 +403,12 @@ run_option() {
     1) config_inicial ;;
     2) limitar_journald ;;
     3) autologout_config ;;
-    4) unattended_upgrades false ;;
-    5) unattended_upgrades true ;;
+    4) unattended_upgrades ;;
     [aA])
       config_inicial
       limitar_journald
       autologout_config
-      unattended_upgrades false
+      unattended_upgrades
       ;;
     0) show_summary; log "Exiting..."; exit 0 ;;
     *) echo "Invalid option: $opcao" ;;
@@ -463,11 +430,10 @@ menu() {
     echo "   3) Configure autologout (15 min)"
     echo ""
     echo " Automatic Updates:"
-    echo "   4) Unattended-upgrades (with email)"
-    echo "   5) Unattended-upgrades (without email)"
+    echo "   4) Unattended-upgrades"
     echo ""
     echo " Run Multiple:"
-    echo "   A) ALL options (1-5)"
+    echo "   A) ALL options (1-4)"
     echo "   0) Exit"
     echo ""
     read -rp " Select option(s) separated by space: " opcoes
