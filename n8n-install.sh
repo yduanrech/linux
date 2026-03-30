@@ -69,7 +69,8 @@ Environment="N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=$N8N_ENFORCE_SETTINGS_FILE_PE
 Environment="N8N_RUNNERS_ENABLED=$N8N_RUNNERS_ENABLED"
 Environment="N8N_SECURE_COOKIE=$N8N_SECURE_COOKIE"
 Environment="N8N_DIAGNOSTICS_ENABLED=$N8N_DIAGNOSTICS_ENABLED"
-Environment="N8N_USER_FOLDER=/var/lib/n8n"  # garante que n8n use /var/lib/n8n em vez de ~/.n8n
+Environment="N8N_PORT=$N8N_PORT"
+Environment="N8N_USER_FOLDER=/var/lib/n8n"
 ExecStart=/usr/bin/env n8n
 WorkingDirectory=/var/lib/n8n
 Restart=always
@@ -85,11 +86,26 @@ EOF
 }
 
 update_n8n() {
-  log "Atualizando n8n..."
+  local CURRENT_VER
+  CURRENT_VER="$(n8n --version 2>/dev/null || echo 'unknown')"
+  log "Current n8n version: $CURRENT_VER"
+
+  # Backup SQLite database before update (migrations can't be rolled back)
+  local DB_FILE="/var/lib/n8n/.n8n/database.sqlite"
+  if [[ -f "$DB_FILE" ]]; then
+    local BACKUP="${DB_FILE}.bak-$(date +%F-%H%M%S)"
+    log "Backing up database to $BACKUP"
+    cp "$DB_FILE" "$BACKUP"
+  fi
+
+  log "Updating n8n..."
   ensure_node
-  npm update -g n8n
+  npm install -g n8n@latest
   systemctl restart n8n
-  log "n8n atualizado e reiniciado."
+
+  local NEW_VER
+  NEW_VER="$(n8n --version 2>/dev/null || echo 'unknown')"
+  log "n8n updated: $CURRENT_VER → $NEW_VER"
 }
 
 ##### MAIN ####################################################################
@@ -98,10 +114,3 @@ if installed; then
 else
   install_n8n
 fi
-
-##### LIMPEZA DO ARQUIVO DE CONFIG (opcional) #################################
-if [[ -f "$CONF_FILE" ]]; then
-  log "Removendo $CONF_FILE por segurança"
-  rm -f "$CONF_FILE"
-fi
-###############################################################################
