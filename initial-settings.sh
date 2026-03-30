@@ -1,74 +1,144 @@
 #!/usr/bin/env bash
 #
 # initial-settings.sh
-# Menu interativo para configuração inicial de servidores Linux
-# Inclui: fuso horário, locale, SSH, journald, autologout, unattended-upgrades
-# Script testado no Ubuntu/Debian
-# v1.2
+# Interactive menu for initial Linux server setup
+# Includes: timezone, locale, SSH, journald, autologout, unattended-upgrades
+# Tested on Ubuntu/Debian
+# v2.0
 #
 set -euo pipefail
 
-# Função: Configuração inicial (fuso horário, locale, SSH)
-config_inicial() {
-  echo "[1/4] Configurando fuso horário para America/Sao_Paulo..."
-  timedatectl set-timezone America/Sao_Paulo
-  echo "✅ Fuso horário configurado: $(timedatectl show --property=Timezone --value)"
+VERSION="2.0"
+LOG_FILE="/var/log/initial-settings.log"
+DRY_RUN=false
+SUMMARY=()
 
-  echo "[2/4] Gerando locale pt_BR.UTF-8..."
-  sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' /etc/locale.gen
-  locale-gen
+# --- Utility functions ---
 
-  echo "[3/4] Configurando locale padrão..."
-  update-locale LANG=pt_BR.UTF-8 LC_ALL=pt_BR.UTF-8
-
-  echo "[4/4] Configurando segurança SSH..."
-  read -r -p "Deseja permitir o login SSH com senha para o usuário root? (s/n): " permitir_ssh
-  if [[ "$permitir_ssh" =~ ^[Ss]$ ]]; then
-    SSH_CONFIG="/etc/ssh/sshd_config"
-    if [[ -f "$SSH_CONFIG" ]]; then
-      if grep -q "^PermitRootLogin" "$SSH_CONFIG"; then
-        sed -i 's/^PermitRootLogin .*/PermitRootLogin yes/' "$SSH_CONFIG"
-      else
-        echo "PermitRootLogin yes" >> "$SSH_CONFIG"
-      fi
-      systemctl restart sshd
-      echo "✅ Login SSH do root habilitado com senha"
-      echo "   ⚠️ ATENÇÃO: Por segurança, considere usar chaves SSH em vez de senhas"
-    else
-      echo "⚠️ Arquivo de configuração SSH não encontrado em $SSH_CONFIG"
-    fi
-  else
-    echo "⚠️ Login SSH do root não foi modificado"
-  fi
-  
-  # Configuração anterior (apenas chaves SSH) - COMENTADO
-  # read -p "Deseja restringir o login SSH para o usuário root? (s/n): " restringir_ssh
-  # if [[ "$restringir_ssh" =~ ^[Ss]$ ]]; then
-  #   SSH_CONFIG="/etc/ssh/sshd_config"
-  #   if [[ -f "$SSH_CONFIG" ]]; then
-  #     if grep -q "^PermitRootLogin" "$SSH_CONFIG"; then
-  #       sed -i 's/^PermitRootLogin .*/PermitRootLogin prohibit-password/' "$SSH_CONFIG"
-  #     else
-  #       echo "PermitRootLogin prohibit-password" >> "$SSH_CONFIG"
-  #     fi
-  #     systemctl restart sshd
-  #     echo "✅ Login SSH do root restringido para apenas chaves (prohibit-password)"
-  #     echo "   ➜ Se você ainda não configurou chaves SSH, faça isso antes de sair desta sessão"
-  #   else
-  #     echo "⚠️ Arquivo de configuração SSH não encontrado em $SSH_CONFIG"
-  #   fi
-  # else
-  #   echo "⚠️ Login SSH do root não foi modificado"
-  # fi
-  echo "✅ Configuração inicial concluída!"
-  echo "   ➜ Locale configurado para pt_BR.UTF-8"
-  echo "   ➜ Para aplicar todas as mudanças, recomenda-se reiniciar o sistema"
+# Log: writes to file and displays on screen
+log() {
+  echo "$*"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE" 2>/dev/null || true
 }
 
+# Safe config file loader (does not execute code, only reads key=value pairs)
+safe_load_conf() {
+  local conf_file="$1"
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+    read -r key <<< "$key"
+    read -r value <<< "$value"
+    value="${value#\"}" ; value="${value%\"}"
+    value="${value#\'}" ; value="${value%\'}"
+    case "$key" in
+      MAIL_TO|GENERIC_FROM|RELAY|SMTP_USER|SMTP_PASS|MAIL_SENDER)
+        declare -g "$key=$value"
+        ;;
+    esac
+  done < "$conf_file"
+}
 
-# Função: Limitar uso do journald
+# Display summary of completed actions
+show_summary() {
+  if [[ ${#SUMMARY[@]} -gt 0 ]]; then
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "              SUMMARY"
+    echo "═══════════════════════════════════════"
+    for item in "${SUMMARY[@]}"; do
+      echo "  ✅ $item"
+    done
+    echo "═══════════════════════════════════════"
+    echo ""
+  fi
+}
+
+# Display help
+show_help() {
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [OPTION_NUMBERS...]
+
+Interactive menu for initial Linux server setup.
+
+Options:
+  --dry-run    Show what would be done without making changes
+  -h, --help   Show this help message
+
+Option numbers (can be combined):
+  1   Timezone, locale, and SSH
+  2   Limit journald usage
+  3   Configure autologout (15 min)
+  4   Unattended-upgrades (with email)
+  5   Unattended-upgrades (without email)
+  A   All options (1-5)
+
+Examples:
+  $(basename "$0")              # Interactive menu
+  $(basename "$0") 1 3          # Run options 1 and 3
+  $(basename "$0") --dry-run A  # Dry-run all options
+EOF
+}
+
+# --- Feature functions ---
+
+# Function: Initial setup (timezone, locale, SSH)
+config_inicial() {
+  log "[1/4] Configurando fuso horário para America/Sao_Paulo..."
+  if [[ "$DRY_RUN" != "true" ]]; then
+    timedatectl set-timezone America/Sao_Paulo
+    log "✅ Fuso horário configurado: $(timedatectl show --property=Timezone --value)"
+  else
+    log "[DRY-RUN] timedatectl set-timezone America/Sao_Paulo"
+  fi
+
+  log "[2/4] Gerando locale pt_BR.UTF-8..."
+  if [[ "$DRY_RUN" != "true" ]]; then
+    sed -i 's/^# *pt_BR.UTF-8/pt_BR.UTF-8/' /etc/locale.gen
+    locale-gen
+  else
+    log "[DRY-RUN] sed locale.gen + locale-gen"
+  fi
+
+  log "[3/4] Configurando locale padrão..."
+  if [[ "$DRY_RUN" != "true" ]]; then
+    update-locale LANG=pt_BR.UTF-8 LC_ALL=pt_BR.UTF-8
+  else
+    log "[DRY-RUN] update-locale LANG=pt_BR.UTF-8 LC_ALL=pt_BR.UTF-8"
+  fi
+
+  log "[4/4] Configurando segurança SSH..."
+  read -r -p "Allow root SSH login with password? (y/n): " permitir_ssh
+  if [[ "$permitir_ssh" =~ ^[Yy]$ ]]; then
+    SSH_CONFIG="/etc/ssh/sshd_config"
+    if [[ -f "$SSH_CONFIG" ]]; then
+      if [[ "$DRY_RUN" != "true" ]]; then
+        if grep -q "^PermitRootLogin" "$SSH_CONFIG"; then
+          sed -i 's/^PermitRootLogin .*/PermitRootLogin yes/' "$SSH_CONFIG"
+        else
+          echo "PermitRootLogin yes" >> "$SSH_CONFIG"
+        fi
+        systemctl reload-or-restart sshd
+      else
+        log "[DRY-RUN] Set PermitRootLogin yes + reload sshd"
+      fi
+      log "✅ Root SSH login enabled with password"
+      log "   ⚠️ WARNING: Consider using SSH keys instead of passwords"
+    else
+      log "⚠️ SSH config not found at $SSH_CONFIG"
+    fi
+  else
+    log "⚠️ Root SSH login was not modified"
+  fi
+
+  log "✅ Initial setup complete!"
+  log "   ➜ Locale set to pt_BR.UTF-8"
+  log "   ➜ A system reboot is recommended to apply all changes"
+  SUMMARY+=("Timezone, locale, SSH")
+}
+
+# Function: Limit journald usage
 limitar_journald() {
-  echo "[JOURNALD] Configurando limites do journald..."
+  log "[JOURNALD] Configurando limites do journald..."
   CONF="/etc/systemd/journald.conf"
   declare -A PARAMS=(
     [SystemMaxUse]="300M"
@@ -76,100 +146,110 @@ limitar_journald() {
     [SystemMaxFileSize]="50M"
     [MaxRetentionSec]="1month"
   )
-  for key in "${!PARAMS[@]}"; do
-    value="${PARAMS[$key]}"
-    if grep -Eq "^[#[:space:]]*${key}=" "$CONF"; then
-      sed -ri "s|^[#[:space:]]*(${key}=).*|\1${value}|" "$CONF"
-    else
-      echo "${key}=${value}" >> "$CONF"
-    fi
-  done
-  systemctl daemon-reload
-  systemctl restart systemd-journald
-  echo "Limites do journald atualizados:"
-  journalctl --disk-usage
+  if [[ "$DRY_RUN" != "true" ]]; then
+    for key in "${!PARAMS[@]}"; do
+      value="${PARAMS[$key]}"
+      if grep -Eq "^[#[:space:]]*${key}=" "$CONF"; then
+        sed -ri "s|^[#[:space:]]*(${key}=).*|\1${value}|" "$CONF"
+      else
+        echo "${key}=${value}" >> "$CONF"
+      fi
+    done
+    systemctl daemon-reload
+    systemctl restart systemd-journald
+    log "Limites do journald atualizados:"
+    journalctl --disk-usage
+  else
+    for key in "${!PARAMS[@]}"; do
+      log "[DRY-RUN] Set ${key}=${PARAMS[$key]}"
+    done
+  fi
+  SUMMARY+=("Journald limits (300M max)")
 }
 
-# Função: Configurar autologout
+# Function: Configure autologout
 autologout_config() {
-  echo "[AUTOLOGOUT] Configurando logout automático após 15 minutos de inatividade..."
-  cat > /etc/profile.d/autologout.sh <<'EOF'
+  log "[AUTOLOGOUT] Configurando logout automático após 15 minutos de inatividade..."
+  if [[ "$DRY_RUN" != "true" ]]; then
+    cat > /etc/profile.d/autologout.sh <<'EOF'
 # /etc/profile.d/autologout.sh
 # Encerra shells Bash inativos após 15min (900s)
 TMOUT=900
 readonly TMOUT
 export TMOUT
 EOF
-  echo "✅  Autologout configurado (TMOUT=900s)."
-  echo "   ➜  Abra um novo terminal ou faça logout/login para que todas as sessões peguem a configuração."
+  else
+    log "[DRY-RUN] Would create /etc/profile.d/autologout.sh (TMOUT=900)"
+  fi
+  log "✅ Autologout configurado (TMOUT=900s)."
+  log "   ➜ Open a new terminal or logout/login for all sessions to pick up the configuration."
+  SUMMARY+=("Autologout (15min)")
 }
 
-# Função: Instalar unattended-upgrades (completo e independente)
-# Parâmetro: com_email (true/false)
+# Function: Install unattended-upgrades
+# Parameter: SKIP_EMAIL (true/false)
 unattended_upgrades() {
   local SKIP_EMAIL="${1:-false}"
   local CONFIGURE_EMAIL=true
   local CONF_FILE=/etc/unattend.conf
-  
-  echo ""
-  echo "[UNATTENDED-UPGRADES] Configurando atualizações automáticas..."
-  
-  # Carrega configurações
+
+  log ""
+  log "[UNATTENDED-UPGRADES] Configurando atualizações automáticas..."
+
+  # Load configuration safely
   if [[ -f "$CONF_FILE" ]]; then
-    # shellcheck source=/etc/unattend.conf
-    source "$CONF_FILE"
-    
-    # Valida variáveis obrigatórias
+    safe_load_conf "$CONF_FILE"
+
+    # Validate required variables
     for var in MAIL_TO GENERIC_FROM RELAY SMTP_USER SMTP_PASS; do
       if [[ -z "${!var:-}" ]]; then
-        echo "Erro: variável $var não definida em $CONF_FILE" >&2
+        log "Error: variable $var not defined in $CONF_FILE" >&2
         return 1
       fi
     done
   else
     if [[ "$SKIP_EMAIL" == "true" ]]; then
-      echo "Aviso: $CONF_FILE não encontrado. Continuando sem configuração de email..."
+      log "Warning: $CONF_FILE not found. Continuing without email configuration..."
       CONFIGURE_EMAIL=false
     else
-      # Loop para permitir re-verificação do arquivo
+      # Loop to allow re-checking the file
       while true; do
         echo ""
-        echo "Aviso: $CONF_FILE não encontrado."
-        echo "O arquivo de configuração contém as credenciais SMTP para notificações por email."
+        log "Warning: $CONF_FILE not found."
+        echo "This config file contains SMTP credentials for email notifications."
         echo ""
-        echo "Opções:"
-        echo "  [Y] Continuar sem configuração de email"
-        echo "  [R] Re-verificar (aguardo você criar o arquivo)"
-        echo "  [N] Cancelar"
+        echo "Options:"
+        echo "  [Y] Continue without email"
+        echo "  [R] Re-check (waiting for you to create the file)"
+        echo "  [N] Cancel"
         echo ""
-        read -rp "Digite sua opção (y/r/N): " resposta
+        read -rp "Choose an option (y/r/N): " resposta
         case "$resposta" in
           [yY])
-            echo "Continuando sem configuração de email..."
+            log "Continuing without email configuration..."
             CONFIGURE_EMAIL=false
             break
             ;;
           [rR])
-            echo "Re-verificando..."
+            log "Re-checking..."
             if [[ -f "$CONF_FILE" ]]; then
-              echo "✅ Arquivo encontrado! Carregando configurações..."
-              # shellcheck source=/etc/unattend.conf
-              source "$CONF_FILE"
-              # Valida variáveis obrigatórias
+              log "✅ File found! Loading configuration..."
+              safe_load_conf "$CONF_FILE"
+              # Validate required variables
               for var in MAIL_TO GENERIC_FROM RELAY SMTP_USER SMTP_PASS; do
                 if [[ -z "${!var:-}" ]]; then
-                  echo "Erro: variável $var não definida em $CONF_FILE" >&2
+                  log "Error: variable $var not defined in $CONF_FILE" >&2
                   return 1
                 fi
               done
               CONFIGURE_EMAIL=true
               break
             else
-              echo "⚠️ Arquivo ainda não encontrado. Tente novamente."
+              log "⚠️ File still not found. Try again."
             fi
             ;;
           *)
-            echo "Operação cancelada." >&2
+            log "Operation cancelled." >&2
             return 1
             ;;
         esac
@@ -177,14 +257,15 @@ unattended_upgrades() {
     fi
   fi
 
-  # Prepara limpeza segura do CONF_FILE
+  # Prepare safe cleanup of CONF_FILE
   cleanup_conf() {
     if [[ -f "$CONF_FILE" ]]; then
       shred -u "$CONF_FILE" 2>/dev/null || rm -f "$CONF_FILE"
     fi
   }
+  trap cleanup_conf EXIT
 
-  # Separa host e porta do RELAY
+  # Split host and port from RELAY
   local RELAY_HOST=""
   local RELAY_PORT=""
   if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
@@ -197,8 +278,24 @@ unattended_upgrades() {
     fi
   fi
 
-  # Instala pacotes necessários
-  echo "[1/8] Atualizando repositórios e instalando pacotes..."
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log "[DRY-RUN] Would install unattended-upgrades, update-notifier-common"
+    [[ "$CONFIGURE_EMAIL" == "true" ]] && log "[DRY-RUN] Would install postfix, mailutils, libsasl2-modules"
+    log "[DRY-RUN] Would configure 50unattended-upgrades and 20auto-upgrades"
+    [[ "$CONFIGURE_EMAIL" == "true" ]] && log "[DRY-RUN] Would configure Postfix SMTP relay"
+    log "[DRY-RUN] Would add cron job: 0 1 * * * /usr/bin/unattended-upgrade -v"
+    log "[DRY-RUN] Would enable unattended-upgrades service"
+    if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
+      SUMMARY+=("Unattended-upgrades with email (dry-run)")
+    else
+      SUMMARY+=("Unattended-upgrades without email (dry-run)")
+    fi
+    trap - EXIT
+    return 0
+  fi
+
+  # Install required packages
+  log "[1/8] Atualizando repositórios e instalando pacotes..."
   apt-get update
   apt-get install -y \
       unattended-upgrades \
@@ -211,8 +308,8 @@ unattended_upgrades() {
         libsasl2-modules
   fi
 
-  # Configura 50unattended-upgrades
-  echo "[2/8] Configurando 50unattended-upgrades..."
+  # Configure 50unattended-upgrades
+  log "[2/8] Configurando 50unattended-upgrades..."
   local U50=/etc/apt/apt.conf.d/50unattended-upgrades
   declare -A U50_SETTINGS=(
       ["Remove-Unused-Kernel-Packages"]="\"true\""
@@ -243,14 +340,14 @@ unattended_upgrades() {
       fi
   done
 
-  # Configura 20auto-upgrades
-  echo "[3/8] Configurando 20auto-upgrades..."
+  # Configure 20auto-upgrades
+  log "[3/8] Configurando 20auto-upgrades..."
   local U20=/etc/apt/apt.conf.d/20auto-upgrades
   declare -A U20_SETTINGS=(
       ["Update-Package-Lists"]="\"1\""
       ["Download-Upgradeable-Packages"]="\"1\""
       ["AutocleanInterval"]="\"7\""
-      ["Unattended-Upgrade"]="\"0\""
+      ["Unattended-Upgrade"]="\"1\""
   )
   touch "$U20"
   for key in "${!U20_SETTINGS[@]}"; do
@@ -262,9 +359,9 @@ unattended_upgrades() {
       fi
   done
 
-  # Configura Postfix (SMTP Relay)
+  # Configure Postfix (SMTP Relay)
   if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
-    echo "[4/8] Configurando Postfix (SMTP Relay)..."
+    log "[4/8] Configurando Postfix (SMTP Relay)..."
     local SMTP_TLS_WRAPPERMODE="no"
     if [[ "$RELAY_PORT" == "465" ]]; then
       SMTP_TLS_WRAPPERMODE="yes"
@@ -287,7 +384,7 @@ EOF
     chmod 600 /etc/postfix/sasl_passwd
     postmap /etc/postfix/sasl_passwd && shred -u /etc/postfix/sasl_passwd
 
-    echo "[5/8] Criando generic map para remetentes..."
+    log "[5/8] Criando generic map para remetentes..."
     local HOST_FQDN
     local HOST_SHORT
     HOST_FQDN=$(hostname -f)
@@ -302,72 +399,116 @@ EOF
     postmap /etc/postfix/generic
     systemctl restart postfix
   else
-    echo "[4/8] Postfix (SMTP Relay) ignorado - email não configurado."
-    echo "[5/8] Generic map ignorado - email não configurado."
+    log "[4/8] Postfix (SMTP Relay) skipped - email not configured."
+    log "[5/8] Generic map skipped - email not configured."
   fi
 
-  # Ajustar cron diário para 01:00
-  echo "[6/8] Ajustando cron diário para 01:00..."
+  # Set daily cron for 01:00
+  log "[6/8] Ajustando cron diário para 01:00..."
   local CRON_LINE="0 1 * * * /usr/bin/unattended-upgrade -v"
   if ! crontab -l 2>/dev/null | grep -Fxq "$CRON_LINE"; then
       (crontab -l 2>/dev/null || true; echo "$CRON_LINE") | crontab -
   fi
 
-  # Habilita serviço unattended-upgrades
-  echo "[7/8] Habilitando serviço unattended-upgrades..."
+  # Enable unattended-upgrades service
+  log "[7/8] Habilitando serviço unattended-upgrades..."
   systemctl enable --now unattended-upgrades
 
-  # Limpeza do arquivo de configuração
+  # Clean up config file
   cleanup_conf
+  trap - EXIT
 
-  echo "[8/8] ✅ Unattended-upgrades configurado com sucesso!"
+  log "[8/8] ✅ Unattended-upgrades configurado com sucesso!"
+  if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
+    SUMMARY+=("Unattended-upgrades (with email)")
+  else
+    SUMMARY+=("Unattended-upgrades (without email)")
+  fi
 }
 
-# Menu interativo
+# --- Menu ---
+
+# Execute a menu option
+run_option() {
+  local opcao="$1"
+  case "$opcao" in
+    1) config_inicial ;;
+    2) limitar_journald ;;
+    3) autologout_config ;;
+    4) unattended_upgrades false ;;
+    5) unattended_upgrades true ;;
+    [aA])
+      config_inicial
+      limitar_journald
+      autologout_config
+      unattended_upgrades false
+      ;;
+    0) show_summary; log "Exiting..."; exit 0 ;;
+    *) echo "Invalid option: $opcao" ;;
+  esac
+}
+
+# Interactive menu (loop)
 menu() {
-  echo ""
-  echo "═══════════════════════════════════════"
-  echo "    CONFIGURAÇÕES INICIAIS LINUX"
-  echo "═══════════════════════════════════════"
-  echo ""
-  echo " Configurações Básicas:"
-  echo "   1) Fuso horário, locale e SSH"
-  echo "   2) Limitar uso do journald"
-  echo "   3) Configurar autologout (15 min)"
-  echo ""
-  echo " Atualizações Automáticas:"
-  echo "   4) Unattended-upgrades (com email)"
-  echo "   5) Unattended-upgrades (sem email)"
-  echo ""
-  echo " Executar Múltiplas:"
-  echo "   A) TODAS as opções (1-5)"
-  echo "   0) Sair"
-  echo ""
-  read -rp " Selecione opção(ões) separadas por espaço: " opcoes
-  
-  for opcao in $opcoes; do
-    case $opcao in
-      1) config_inicial ;;
-      2) limitar_journald ;;
-      3) autologout_config ;;
-      4) unattended_upgrades false ;;
-      5) unattended_upgrades true ;;
-      [aA]) 
-        config_inicial
-        limitar_journald
-        autologout_config
-        unattended_upgrades false
-        ;;
-      0) echo "Saindo..."; exit 0 ;;
-      *) echo "Opção inválida: $opcao" ;;
-    esac
+  while true; do
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "     INITIAL LINUX SETTINGS v${VERSION}"
+    [[ "$DRY_RUN" == "true" ]] && echo "           [DRY-RUN MODE]"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo " Basic Setup:"
+    echo "   1) Timezone, locale, and SSH"
+    echo "   2) Limit journald usage"
+    echo "   3) Configure autologout (15 min)"
+    echo ""
+    echo " Automatic Updates:"
+    echo "   4) Unattended-upgrades (with email)"
+    echo "   5) Unattended-upgrades (without email)"
+    echo ""
+    echo " Run Multiple:"
+    echo "   A) ALL options (1-5)"
+    echo "   0) Exit"
+    echo ""
+    read -rp " Select option(s) separated by space: " opcoes
+
+    for opcao in $opcoes; do
+      run_option "$opcao"
+    done
+
+    show_summary
+    SUMMARY=()
   done
 }
 
-# Verificação de permissões
+# --- Main ---
+
+# Parse arguments
+CLI_OPTIONS=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=true ;;
+    -h|--help) show_help; exit 0 ;;
+    *) CLI_OPTIONS+=("$arg") ;;
+  esac
+done
+
+# Check permissions
 if [[ $EUID -ne 0 ]]; then
-  echo "⚠️  Este script precisa ser executado como root (sudo)." >&2
+  echo "⚠️  This script must be run as root (sudo)." >&2
   exit 1
 fi
 
-menu
+# Initialize log
+echo "" >> "$LOG_FILE" 2>/dev/null || true
+log "=== initial-settings.sh v${VERSION} started ==="
+
+# Execute: CLI args or interactive menu
+if [[ ${#CLI_OPTIONS[@]} -gt 0 ]]; then
+  for opcao in "${CLI_OPTIONS[@]}"; do
+    run_option "$opcao"
+  done
+  show_summary
+else
+  menu
+fi
