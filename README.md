@@ -14,6 +14,7 @@ Scripts de automação para Ubuntu/Debian (setup inicial, updates, observabilida
 | `individuais/autologout-install.sh` | Configura autologout global (`TMOUT=900`) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/autologout-install.sh)"` |
 | `individuais/limit-journal.sh` | Ajusta retenção e tamanho do `journald` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/limit-journal.sh)"` |
 | `mariadb-backup/mariadb_backup.sh` | Backup lógico MariaDB com envio opcional ao PBS | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/mariadb-backup/mariadb_backup.sh)"` |
+| `fix/fix-unattended-upgrades.sh` | Corrige unattended-upgrades em servidores existentes (reboot-with-users, periodic, cronjob) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/fix/fix-unattended-upgrades.sh)"` |
 
 ## Documentação por Script
 

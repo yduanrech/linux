@@ -256,7 +256,6 @@ unattended_upgrades() {
     [[ "$CONFIGURE_EMAIL" == "true" ]] && log "[DRY-RUN] Would install postfix, mailutils, libsasl2-modules"
     log "[DRY-RUN] Would configure 50unattended-upgrades and 20auto-upgrades"
     [[ "$CONFIGURE_EMAIL" == "true" ]] && log "[DRY-RUN] Would configure Postfix SMTP relay"
-    log "[DRY-RUN] Would add cron job: 0 1 * * * /usr/bin/unattended-upgrade -v"
     log "[DRY-RUN] Would enable unattended-upgrades service"
     if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
       SUMMARY+=("Unattended-upgrades with email (dry-run)")
@@ -286,7 +285,7 @@ unattended_upgrades() {
   declare -A U50_SETTINGS=(
       ["Remove-Unused-Kernel-Packages"]="\"true\""
       ["Automatic-Reboot"]="\"true\""
-      ["Automatic-Reboot-WithUsers"]="\"true\""
+      ["Automatic-Reboot-WithUsers"]="\"false\""
       ["Automatic-Reboot-Time"]="\"03:00\""
   )
 
@@ -375,18 +374,11 @@ EOF
     log "[5/8] Generic map skipped - email not configured."
   fi
 
-  # Set daily cron for 01:00
-  log "[6/8] Ajustando cron diário para 01:00..."
-  local CRON_LINE="0 1 * * * /usr/bin/unattended-upgrade -v"
-  if ! crontab -l 2>/dev/null | grep -Fxq "$CRON_LINE"; then
-      (crontab -l 2>/dev/null || true; echo "$CRON_LINE") | crontab -
-  fi
-
   # Enable unattended-upgrades service
-  log "[7/8] Habilitando serviço unattended-upgrades..."
+  log "[6/7] Habilitando serviço unattended-upgrades..."
   systemctl enable --now unattended-upgrades
 
-  log "[8/8] ✅ Unattended-upgrades configurado com sucesso!"
+  log "[7/7] ✅ Unattended-upgrades configurado com sucesso!"
   if [[ "$CONFIGURE_EMAIL" == "true" ]]; then
     SUMMARY+=("Unattended-upgrades (with email)")
   else

@@ -143,7 +143,7 @@ U50=/etc/apt/apt.conf.d/50unattended-upgrades
 declare -A U50_SETTINGS=(
     ["Remove-Unused-Kernel-Packages"]="\"true\""
     ["Automatic-Reboot"]="\"true\""
-    ["Automatic-Reboot-WithUsers"]="\"true\""
+    ["Automatic-Reboot-WithUsers"]="\"false\""
     ["Automatic-Reboot-Time"]="\"03:00\""
 )
 
@@ -177,8 +177,7 @@ declare -A U20_SETTINGS=(
     ["Update-Package-Lists"]="\"1\""
     ["Download-Upgradeable-Packages"]="\"1\""
     ["AutocleanInterval"]="\"7\""
-    # O controle de quando o Unattended Upgrade roda é feito vai cronjon, para mais controle
-    ["Unattended-Upgrade"]="\"0\""
+    ["Unattended-Upgrade"]="\"1\""
 )
 touch "$U20"
 for key in "${!U20_SETTINGS[@]}"; do
@@ -233,16 +232,9 @@ else
   echo "[5/8] Generic map ignorado - email não configurado."
 fi
 
-# 10) Ajustar cron diário para 01:00
-echo "[6/8] Ajustando cron diário para 01:00..."
-CRON_LINE="0 1 * * * /usr/bin/unattended-upgrade -v"
-if ! crontab -l 2>/dev/null | grep -Fxq "$CRON_LINE"; then
-    (crontab -l 2>/dev/null || true; echo "$CRON_LINE") | crontab -
-fi
-
-# 11) Habilita serviço unattended-upgrades
-echo "[7/8] Habilitando serviço unattended-upgrades..."
+# 10) Habilita serviço unattended-upgrades
+echo "[6/7] Habilitando serviço unattended-upgrades..."
 systemctl enable --now unattended-upgrades
 
-# 12) Conclusão
-echo "[8/8] ✅ Script concluído."
+# 11) Conclusão
+echo "[7/7] ✅ Script concluído."
