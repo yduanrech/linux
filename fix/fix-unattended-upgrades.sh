@@ -43,7 +43,7 @@ echo ""
 echo "=== [3/3] Removendo cronjob legado ==="
 CRON_LINE='0 1 * * * /usr/bin/unattended-upgrade -v'
 if crontab -l 2>/dev/null | grep -Fxq "$CRON_LINE"; then
-  crontab -l 2>/dev/null | grep -Fxv "$CRON_LINE" | crontab -
+  crontab -l 2>/dev/null | grep -Fxv "$CRON_LINE" | crontab - || crontab -r 2>/dev/null
   echo "  ✅ Cronjob removido"
 else
   echo "  ℹ️ Cronjob não encontrado (já removido ou inexistente)"
