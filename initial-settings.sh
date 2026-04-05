@@ -200,7 +200,7 @@ EOF
 # Function: Install unattended-upgrades
 unattended_upgrades() {
   local CONFIGURE_EMAIL=false
-  local MAIL_TO="" GENERIC_FROM="" RELAY="" SMTP_USER="" SMTP_PASS="" MAIL_SENDER=""
+  MAIL_TO="" GENERIC_FROM="" RELAY="" SMTP_USER="" SMTP_PASS="" MAIL_SENDER=""
 
   log ""
   log "[UNATTENDED-UPGRADES] Configurando atualizações automáticas..."
