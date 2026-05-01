@@ -16,7 +16,9 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 - Cria usuário de serviço `n8n`
 - Configura `n8n.service` em `/etc/systemd/system/n8n.service`
 - Regrava o `n8n.service` também durante update
-- Faz backup prévio do `database.sqlite` quando existir
+- Libera o node `Execute Command` por padrão com `NODES_EXCLUDE=[]`
+- Faz backup prévio do `database.sqlite` quando existir e houver espaço suficiente
+- Limpa o cache do npm depois da instalação/update
 - Valida o binário antes de reiniciar o serviço
 
 ## Variáveis úteis (opcionais)
@@ -26,11 +28,26 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 - `N8N_HOST`
 - `N8N_PROTOCOL`
 - `N8N_PORT`
+- `NODES_EXCLUDE`
+- `N8N_BACKUP_BEFORE_UPDATE`
+- `N8N_BACKUP_DIR`
 
 Exemplo:
 
 ```bash
 sudo HOST_IP="10.0.0.20" N8N_PROTOCOL="http" N8N_PORT="5678" bash n8n-install.sh
+```
+
+Para manter o node `Execute Command` bloqueado:
+
+```bash
+sudo NODES_EXCLUDE='["n8n-nodes-base.executeCommand","n8n-nodes-base.localFileTrigger"]' bash n8n-install.sh
+```
+
+Para pular o backup prévio do SQLite:
+
+```bash
+sudo N8N_BACKUP_BEFORE_UPDATE="false" bash n8n-install.sh
 ```
 
 ## Validação

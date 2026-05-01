@@ -25,11 +25,14 @@ N8N_PROTOCOL="${N8N_PROTOCOL:-http}"
 N8N_PORT="${N8N_PORT:-5678}"                       # porta padrão
 WEBHOOK_URL="${WEBHOOK_URL:-${N8N_PROTOCOL}://${N8N_HOST}}"
 
-: "${N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS:=false}"
+: "${N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS:=true}"
 : "${N8N_RUNNERS_ENABLED:=true}"
 : "${N8N_SECURE_COOKIE:=false}"
 : "${N8N_DIAGNOSTICS_ENABLED:=false}"
 : "${N8N_RELEASE_TYPE:=stable}"
+: "${NODES_EXCLUDE:=[]}"
+: "${N8N_BACKUP_BEFORE_UPDATE:=true}"
+: "${N8N_BACKUP_DIR:=}"
 ###############################################################################
 
 log() { printf '\e[1;34m[INFO]\e[0m %s\n' "$*"; }
@@ -38,6 +41,9 @@ global_node_modules_dir() { npm root -g; }
 n8n_global_dir() { printf '%s/n8n\n' "$(global_node_modules_dir)"; }
 
 write_systemd_unit() {
+  local nodes_exclude_systemd
+  nodes_exclude_systemd="${NODES_EXCLUDE//\"/\\\"}"
+
   cat >/etc/systemd/system/n8n.service <<EOF
 [Unit]
 Description=n8n workflow automation
@@ -58,6 +64,7 @@ Environment="N8N_DIAGNOSTICS_ENABLED=$N8N_DIAGNOSTICS_ENABLED"
 Environment="N8N_RELEASE_TYPE=$N8N_RELEASE_TYPE"
 Environment="N8N_PORT=$N8N_PORT"
 Environment="N8N_USER_FOLDER=/var/lib/n8n"
+Environment="NODES_EXCLUDE=$nodes_exclude_systemd"
 ExecStart=/usr/bin/env n8n
 WorkingDirectory=/var/lib/n8n
 Restart=always
@@ -71,6 +78,41 @@ EOF
 ensure_service_user_and_dirs() {
   id -u n8n &>/dev/null || useradd --system --create-home --home-dir /home/n8n --shell /usr/sbin/nologin n8n
   install -d -o n8n -g n8n /var/lib/n8n /var/log/n8n
+}
+
+backup_n8n_database() {
+  local db_file backup_dir backup_path db_size_kb avail_kb min_free_kb
+
+  db_file="/var/lib/n8n/.n8n/database.sqlite"
+
+  if [[ "$N8N_BACKUP_BEFORE_UPDATE" != "true" ]]; then
+    log "Backup pré-update desativado por N8N_BACKUP_BEFORE_UPDATE=$N8N_BACKUP_BEFORE_UPDATE"
+    return 0
+  fi
+
+  [[ -f "$db_file" ]] || return 0
+
+  backup_dir="${N8N_BACKUP_DIR:-$(dirname "$db_file")}"
+  install -d "$backup_dir"
+
+  db_size_kb="$(du -k "$db_file" | awk '{print $1}')"
+  avail_kb="$(df -Pk "$backup_dir" | awk 'NR==2 {print $4}')"
+  min_free_kb=$((db_size_kb + (db_size_kb / 10) + 1024))
+
+  if (( avail_kb <= min_free_kb )); then
+    log "Espaço insuficiente para backup em $backup_dir; seguindo sem criar cópia local."
+    return 0
+  fi
+
+  backup_path="${backup_dir}/database.sqlite.bak-$(date +%F-%H%M%S)"
+  log "Backing up database to $backup_path"
+  cp "$db_file" "$backup_path"
+}
+
+cleanup_npm_cache() {
+  log "Limpando cache do npm..."
+  npm cache clean --force >/dev/null 2>&1 || true
+  rm -rf /root/.npm/_cacache /root/.npm/_npx 2>/dev/null || true
 }
 
 reinstall_n8n_global() {
@@ -90,6 +132,7 @@ reinstall_n8n_global() {
 
   log "Instalando n8n globalmente..."
   npm install -g n8n@latest
+  cleanup_npm_cache
 }
 
 validate_n8n_runtime() {
@@ -132,12 +175,7 @@ update_n8n() {
   log "Current n8n version: $CURRENT_VER"
 
   # Backup SQLite database before update (migrations can't be rolled back)
-  local DB_FILE="/var/lib/n8n/.n8n/database.sqlite"
-  if [[ -f "$DB_FILE" ]]; then
-    local BACKUP="${DB_FILE}.bak-$(date +%F-%H%M%S)"
-    log "Backing up database to $BACKUP"
-    cp "$DB_FILE" "$BACKUP"
-  fi
+  backup_n8n_database
 
   log "Updating n8n..."
   ensure_node
