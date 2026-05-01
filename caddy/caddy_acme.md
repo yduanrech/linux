@@ -14,7 +14,7 @@ O script novo ficará na raiz como `caddy-acme-install.sh`, com documentação e
 Interface pública do script:
 - sem argumentos
   - abre menu interativo
-  - oferece opções como `init`, `issue-cert`, `add-site`, `validate` e ajuda resumida
+  - oferece opções como `init`, `issue-cert`, `add-site`, `validate`, `upgrade-acme` e ajuda resumida
   - faz prompts para os parâmetros obrigatórios quando a opção escolhida precisar
 - com argumentos
   - executa diretamente o subcomando informado, sem abrir menu
@@ -38,6 +38,9 @@ Interface pública do script:
   - referencia o certificado manual daquele FQDN
 - `validate`
   - executa `caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile`
+- `upgrade-acme`
+  - executa o atualizador proprio do `acme.sh`
+  - cobre o caso em que `apt upgrade` atualiza o Caddy, mas nao atualiza o `acme.sh`
 - `--dry-run`
   - disponível nos subcomandos mutáveis
 
@@ -53,7 +56,7 @@ Arquivo de configuração persistente:
 Layout de configuração do Caddy:
 - `/etc/caddy/Caddyfile`
   - opções globais mínimas
-  - `import /etc/caddy/sites.d/*.caddy`
+  - `import sites.d/*.caddy`
 - `/etc/caddy/sites.d/<fqdn>.caddy`
   - um host por arquivo
   - `tls /etc/caddy/certs/<fqdn>/fullchain.pem /etc/caddy/certs/<fqdn>/privkey.pem`
@@ -77,6 +80,7 @@ Cenários principais:
 
 Aceite funcional:
 - Caddy permanece atualizável via `apt upgrade`
+- `acme.sh` fica atualizável pelo subcomando `upgrade-acme`
 - nenhum plugin Cloudflare no Caddy
 - renovação do `acme.sh` recarrega o Caddy automaticamente
 - sem argumentos, o script abre um menu interativo utilizável para bootstrap e manutenção simples
