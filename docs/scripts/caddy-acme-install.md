@@ -59,7 +59,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 
 ## Arquivos criados
 
-- `/etc/caddy-acme.conf`: configuracao persistente, permissao `0600`, com `ACME_EMAIL`, `CF_Token` e `CF_Account_ID` ou `CF_Zone_ID`.
+- `/etc/caddy-acme.conf`: configuracao persistente, permissao `0600`, com `ACME_EMAIL`, `CF_Token`, `CF_Account_ID` ou `CF_Zone_ID` e `CADDY_CERTS_DIR`.
 - `/etc/caddy/Caddyfile`: arquivo base gerenciado, com `import sites.d/*.caddy`.
 - `/etc/caddy/sites.d/<fqdn>.caddy`: um reverse proxy por host.
 - `/etc/caddy/certs/<fqdn>/fullchain.pem`: certificado instalado pelo `acme.sh`.

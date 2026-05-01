@@ -48,7 +48,6 @@ Arquivo de configuração persistente:
 - `/etc/caddy-acme.conf`
 - chaves previstas:
   - `ACME_EMAIL`
-  - `PRIMARY_DOMAIN` opcional, para facilitar prompts
   - `CF_Token`
   - `CF_Account_ID` ou `CF_Zone_ID`
   - `CADDY_CERTS_DIR=/etc/caddy/certs`

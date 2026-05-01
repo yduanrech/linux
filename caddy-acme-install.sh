@@ -234,11 +234,10 @@ ensure_acme_sh() {
 
 write_config_file() {
   local acme_email="$1"
-  local primary_domain="$2"
-  local cf_token="$3"
-  local id_kind="$4"
-  local id_value="$5"
-  local certs_dir="${6:-$DEFAULT_CERTS_DIR}"
+  local cf_token="$2"
+  local id_kind="$3"
+  local id_value="$4"
+  local certs_dir="${5:-$DEFAULT_CERTS_DIR}"
   local account_id_line="CF_Account_ID="
   local zone_id_line="CF_Zone_ID="
 
@@ -251,7 +250,6 @@ write_config_file() {
   local content
   content="# $MANAGED_MARKER
 ACME_EMAIL=$(shell_quote "$acme_email")
-PRIMARY_DOMAIN=$(shell_quote "$primary_domain")
 CF_Token=$(shell_quote "$cf_token")
 $account_id_line
 $zone_id_line
@@ -325,7 +323,7 @@ ensure_caddyfile() {
 }
 
 wizard_config() {
-  local acme_email primary_domain cf_token id_choice id_value id_kind
+  local acme_email cf_token id_choice id_value id_kind
 
   if [[ -r "$CONF_FILE" && "$FORCE" != "true" ]]; then
     log "$CONF_FILE ja existe. Reutilizando configuracao existente."
@@ -334,7 +332,6 @@ wizard_config() {
   fi
 
   prompt_required "Email ACME: " acme_email
-  read -r -p "Dominio principal opcional (ex: example.com): " primary_domain
   prompt_secret "Cloudflare CF_Token: " cf_token
 
   printf '\nCloudflare ID:\n'
@@ -357,7 +354,6 @@ wizard_config() {
 
   printf '\nResumo da configuracao:\n'
   printf '  ACME_EMAIL: %s\n' "$acme_email"
-  printf '  PRIMARY_DOMAIN: %s\n' "${primary_domain:-<vazio>}"
   printf '  CF_Token: %s\n' "$(mask_secret "$cf_token")"
   if [[ "$id_kind" == "account" ]]; then
     printf '  CF_Account_ID: %s\n' "$id_value"
@@ -368,7 +364,7 @@ wizard_config() {
 
   confirm_action "Confirmar configuracao e continuar? (y/N): " || die "Operacao cancelada."
 
-  write_config_file "$acme_email" "$primary_domain" "$cf_token" "$id_kind" "$id_value" "$DEFAULT_CERTS_DIR"
+  write_config_file "$acme_email" "$cf_token" "$id_kind" "$id_value" "$DEFAULT_CERTS_DIR"
   if [[ "$DRY_RUN" == "true" ]]; then
     ACME_EMAIL="$acme_email"
     CF_Token="$cf_token"
