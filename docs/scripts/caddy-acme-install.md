@@ -20,6 +20,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 
 O `--` apos o `bash -c` e necessario para passar argumentos ao script baixado.
 
+No modo interativo, o script mostra um resumo e pede confirmacao antes de gravar configuracao, emitir certificado ou criar/atualizar um site. No modo CLI com subcomandos, ele executa direto para continuar scriptavel.
+
 ## Fluxo recomendado
 
 Primeira execucao:

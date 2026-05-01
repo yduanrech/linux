@@ -27,6 +27,25 @@ log() { printf '[INFO] %s\n' "$*"; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
 die() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
+mask_secret() {
+  local value="$1"
+  local len=${#value}
+
+  if (( len <= 8 )); then
+    printf '********'
+  else
+    printf '%s********%s' "${value:0:4}" "${value: -4}"
+  fi
+}
+
+confirm_action() {
+  local prompt_text="$1"
+  local reply=""
+
+  read -r -p "$prompt_text" reply
+  [[ "$reply" =~ ^[Yy]$ ]]
+}
+
 usage() {
   cat <<EOF
 caddy-acme-install.sh v${VERSION}
@@ -336,6 +355,19 @@ wizard_config() {
       ;;
   esac
 
+  printf '\nResumo da configuracao:\n'
+  printf '  ACME_EMAIL: %s\n' "$acme_email"
+  printf '  PRIMARY_DOMAIN: %s\n' "${primary_domain:-<vazio>}"
+  printf '  CF_Token: %s\n' "$(mask_secret "$cf_token")"
+  if [[ "$id_kind" == "account" ]]; then
+    printf '  CF_Account_ID: %s\n' "$id_value"
+  else
+    printf '  CF_Zone_ID: %s\n' "$id_value"
+  fi
+  printf '  CADDY_CERTS_DIR: %s\n' "$DEFAULT_CERTS_DIR"
+
+  confirm_action "Confirmar configuracao e continuar? (y/N): " || die "Operacao cancelada."
+
   write_config_file "$acme_email" "$primary_domain" "$cf_token" "$id_kind" "$id_value" "$DEFAULT_CERTS_DIR"
   if [[ "$DRY_RUN" == "true" ]]; then
     ACME_EMAIL="$acme_email"
@@ -520,6 +552,7 @@ cmd_upgrade_acme() {
 
 menu() {
   local choice domain upstream skip
+  local skip_enabled
 
   while true; do
     printf '\n'
@@ -543,13 +576,27 @@ menu() {
         ;;
       2)
         prompt_required "FQDN (ex: app.example.com): " domain
+        printf '\nResumo:\n'
+        printf '  Acao: emitir certificado\n'
+        printf '  Dominio: %s\n' "$(normalize_domain "$domain")"
+        confirm_action "Confirmar emissao? (y/N): " || die "Operacao cancelada."
         cmd_issue_cert "$domain"
         ;;
       3)
         prompt_required "FQDN (ex: app.example.com): " domain
         prompt_required "Upstream (ex: http://10.0.0.10:3000): " upstream
         read -r -p "Ignorar validacao TLS do upstream HTTPS? (y/N): " skip
+        skip_enabled="nao"
         if [[ "$skip" =~ ^[Yy]$ ]]; then
+          skip_enabled="sim"
+        fi
+        printf '\nResumo:\n'
+        printf '  Acao: adicionar/atualizar site\n'
+        printf '  Dominio: %s\n' "$(normalize_domain "$domain")"
+        printf '  Upstream: %s\n' "${upstream%/}"
+        printf '  Skip TLS verify: %s\n' "$skip_enabled"
+        confirm_action "Confirmar gravacao do site? (y/N): " || die "Operacao cancelada."
+        if [[ "$skip_enabled" == "sim" ]]; then
           cmd_add_site "$domain" "$upstream" "true"
         else
           cmd_add_site "$domain" "$upstream" "false"
