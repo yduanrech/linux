@@ -1,19 +1,26 @@
 # Plano: `caddy-acme-install.sh` para Caddy + acme.sh + Cloudflare
 
 ## Resumo
-Criar um script raiz, idempotente e orientado por wizard persistente para Debian/Ubuntu, focado em:
+Criar um script raiz, idempotente e orientado por menu interativo + subcomandos para Debian/Ubuntu, focado em:
 - instalar o Caddy pelo repositório oficial `apt`
 - instalar e configurar `acme.sh` para emissão DNS-01 via Cloudflare
 - usar certificados manuais em disco no Caddy
 - manter a configuração modular em `/etc/caddy/Caddyfile` + `/etc/caddy/sites.d/*.caddy`
 - priorizar certificados por host/FQDN, não wildcard, nesta v1
 
-O script novo ficará na raiz como `caddy-acme-install.sh`, com documentação em `docs/scripts/caddy-acme-install.md` e entrada no `README.md`.
+O script novo ficará na raiz como `caddy-acme-install.sh`, com documentação em `docs/scripts/caddy-acme-install.md` e entrada no `README.md`. O padrão de execução seguirá o restante do repositório: um arquivo único chamável por `bash -c "$(curl -fsSL ...)"`.
 
 ## Interface e mudanças principais
 Interface pública do script:
+- sem argumentos
+  - abre menu interativo
+  - oferece opções como `init`, `issue-cert`, `add-site`, `validate` e ajuda resumida
+  - faz prompts para os parâmetros obrigatórios quando a opção escolhida precisar
+- com argumentos
+  - executa diretamente o subcomando informado, sem abrir menu
+  - compatível com chamadas como `bash -c "$(curl -fsSL ...)" -- <subcomando> ...`
 - `init`
-  - wizard inicial
+  - wizard inicial quando chamado diretamente ou via menu
   - instala dependências, repo oficial do Caddy, `caddy`, `acme.sh`
   - cria `/etc/caddy-acme.conf` com permissões `0600`
   - cria `/etc/caddy/Caddyfile`, `/etc/caddy/sites.d/`, `/etc/caddy/certs/`
@@ -57,6 +64,7 @@ Regras de idempotência:
 - reexecução atualiza apenas arquivos gerenciados pelo script
 - se existir arquivo conflitante sem cabeçalho de gerenciamento, o script aborta e orienta o usuário, salvo `--force`
 - `init` não apaga sites já existentes em `/etc/caddy/sites.d/`
+- o menu interativo reaproveita os mesmos subcomandos internos; não haverá lógica separada para "modo menu" e "modo CLI"
 
 ## Testes e critérios de aceite
 Cenários principais:
@@ -71,6 +79,8 @@ Aceite funcional:
 - Caddy permanece atualizável via `apt upgrade`
 - nenhum plugin Cloudflare no Caddy
 - renovação do `acme.sh` recarrega o Caddy automaticamente
+- sem argumentos, o script abre um menu interativo utilizável para bootstrap e manutenção simples
+- com argumentos, o script permite operação não interativa e previsível
 - o operador consegue adicionar um host novo com no máximo:
   1. `issue-cert`
   2. `add-site`
@@ -82,6 +92,9 @@ Aceite funcional:
 - `acme.sh` ficará no local padrão do root e usará o agendador nativo dele; a v1 não cria timer systemd próprio
 - a v1 implementa apenas certificados por host/FQDN; wildcard fica fora do escopo inicial
 - o script será genérico para reverse proxy; não haverá presets opinionados para serviços específicos nesta primeira versão
+- a UX padrão será híbrida:
+  - sem args: menu interativo
+  - com args: subcomandos/parâmetros
 - permissões esperadas:
   - `/etc/caddy-acme.conf` `0600 root:root`
   - diretórios de certificados com grupo legível pelo serviço do Caddy
