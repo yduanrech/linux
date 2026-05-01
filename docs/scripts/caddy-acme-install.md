@@ -85,3 +85,4 @@ As renovacoes dos certificados ficam a cargo do agendador criado pelo proprio `a
 - A v1 nao implementa wildcard; o fluxo principal e um certificado por FQDN.
 - O script atualiza arquivos gerenciados por ele e evita sobrescrever arquivos existentes sem o marcador `Managed by caddy-acme-install.sh`, salvo com `--force`.
 - Use `--dry-run` para ver as acoes sem alterar o sistema.
+- Exemplos prontos de `Caddyfile` ficam em `caddy/examples/`, incluindo PVE, PBS, UniFi, Uptime Kuma e n8n.

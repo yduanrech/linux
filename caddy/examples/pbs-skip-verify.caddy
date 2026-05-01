@@ -1,0 +1,12 @@
+# Proxmox Backup Server WebUI ignorando a validacao do certificado interno do backend.
+# Use somente para a GUI; nao coloque o trafego de backup/restore atras desse proxy.
+
+pbs.example.com {
+    tls /etc/caddy/certs/pbs.example.com/fullchain.pem /etc/caddy/certs/pbs.example.com/privkey.pem
+
+    reverse_proxy https://10.0.0.20:8007 {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}

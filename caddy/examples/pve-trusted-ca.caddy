@@ -1,0 +1,13 @@
+# Proxmox VE WebUI usando a CA interna do PVE.
+# Se o backend e acessado por IP, ajuste tls_server_name para o FQDN do no.
+
+pve01.example.com {
+    tls /etc/caddy/certs/pve01.example.com/fullchain.pem /etc/caddy/certs/pve01.example.com/privkey.pem
+
+    reverse_proxy https://10.0.0.10:8006 {
+        transport http {
+            tls_trusted_ca_certs /etc/caddy/internal-ca/pve-root-ca.pem
+            tls_server_name pve01.example.com
+        }
+    }
+}

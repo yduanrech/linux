@@ -1,0 +1,12 @@
+# Proxmox VE WebUI ignorando a validacao do certificado interno do backend.
+# Use principalmente para testes ou quando voce ainda nao distribuiu a CA interna.
+
+pve01.example.com {
+    tls /etc/caddy/certs/pve01.example.com/fullchain.pem /etc/caddy/certs/pve01.example.com/privkey.pem
+
+    reverse_proxy https://10.0.0.10:8006 {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}

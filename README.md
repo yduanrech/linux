@@ -29,10 +29,13 @@ Scripts de automação para Ubuntu/Debian (setup inicial, updates, observabilida
 - `docs/scripts/limit-journal.md`
 - `docs/scripts/mariadb-backup.md`
 
+## Extras
+
+- `caddy/examples/`: exemplos de `Caddyfile` para PVE, PBS, UniFi, Uptime Kuma e n8n
+
 ## Notas
 
 - A maior parte dos scripts exige `root` (`sudo`).
 - Os scripts foram escritos para Ubuntu/Debian.
-
 
 

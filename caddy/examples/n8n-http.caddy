@@ -1,0 +1,7 @@
+# n8n usando backend HTTP simples.
+
+n8n.example.com {
+    tls /etc/caddy/certs/n8n.example.com/fullchain.pem /etc/caddy/certs/n8n.example.com/privkey.pem
+
+    reverse_proxy http://10.0.0.50:5678
+}

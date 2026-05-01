@@ -1,0 +1,11 @@
+# UniFi Network Controller ignorando a validacao do certificado interno do backend.
+
+unifi.example.com {
+    tls /etc/caddy/certs/unifi.example.com/fullchain.pem /etc/caddy/certs/unifi.example.com/privkey.pem
+
+    reverse_proxy https://10.0.0.30:8443 {
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}

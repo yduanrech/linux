@@ -1,0 +1,13 @@
+# Proxmox Backup Server WebUI usando a CA interna do PBS.
+# Recomendado apenas para a interface web. O trafego de backup deve continuar direto em :8007.
+
+pbs.example.com {
+    tls /etc/caddy/certs/pbs.example.com/fullchain.pem /etc/caddy/certs/pbs.example.com/privkey.pem
+
+    reverse_proxy https://10.0.0.20:8007 {
+        transport http {
+            tls_trusted_ca_certs /etc/caddy/internal-ca/pbs-root-ca.pem
+            tls_server_name pbs.example.com
+        }
+    }
+}
