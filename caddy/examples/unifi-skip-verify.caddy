@@ -1,9 +1,12 @@
 # UniFi Network Controller ignorando a validacao do certificado interno do backend.
+# O UniFi costuma precisar do Host preservado no upstream.
 
 unifi.example.com {
     tls /etc/caddy/certs/unifi.example.com/fullchain.pem /etc/caddy/certs/unifi.example.com/privkey.pem
 
     reverse_proxy https://10.0.0.30:8443 {
+        header_up Host {hostport}
+
         transport http {
             tls_insecure_skip_verify
         }

@@ -26,4 +26,5 @@ Quando o upstream e um IP, mas o certificado interno do backend foi emitido para
 
 - Para PVE, o reverse proxy e viavel para a WebUI. Consoles e noVNC dependem de WebSocket, e o `reverse_proxy` do Caddy lida com isso automaticamente.
 - Para PBS, use reverse proxy so para a WebUI. O trafego real de backup e restore deve continuar indo direto para o PBS em `:8007`.
+- Para UniFi Controller, os exemplos incluem `header_up Host {hostport}`, porque o backend costuma ser sensivel ao Host encaminhado pelo proxy.
 - Para PVE/PBS com certificado interno proprio, o modo `trusted-ca` costuma exigir copiar a CA do backend para o host do Caddy.

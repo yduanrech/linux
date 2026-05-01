@@ -1,10 +1,13 @@
 # UniFi Network Controller usando a CA interna do backend.
 # Ajuste tls_server_name se o certificado interno do UniFi foi emitido para um nome DNS.
+# O UniFi costuma precisar do Host preservado no upstream.
 
 unifi.example.com {
     tls /etc/caddy/certs/unifi.example.com/fullchain.pem /etc/caddy/certs/unifi.example.com/privkey.pem
 
     reverse_proxy https://10.0.0.30:8443 {
+        header_up Host {hostport}
+
         transport http {
             tls_trusted_ca_certs /etc/caddy/internal-ca/unifi-ca.pem
             tls_server_name unifi.example.com
