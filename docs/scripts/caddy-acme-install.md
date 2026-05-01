@@ -86,6 +86,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 
 As renovacoes dos certificados ficam a cargo do agendador criado pelo proprio `acme.sh`. O comando `--install-cert` grava um reload command para ajustar permissoes e recarregar o Caddy apos renovacoes.
 
+Os arquivos gerados pelo script passam por `caddy fmt --overwrite` antes da validacao, para manter o formato padrao do Caddy.
+
 ## Observacoes
 
 - Requer Debian/Ubuntu e execucao como root.

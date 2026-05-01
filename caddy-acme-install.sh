@@ -92,6 +92,18 @@ run_cmd() {
   "$@"
 }
 
+fmt_caddy_file() {
+  local target="$1"
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log "[DRY-RUN] formataria $target com caddy fmt"
+    return 0
+  fi
+
+  command -v caddy >/dev/null 2>&1 || die "caddy nao encontrado para formatar $target."
+  run_cmd caddy fmt --overwrite "$target"
+}
+
 write_file() {
   local target="$1"
   local content="$2"
@@ -320,6 +332,7 @@ ensure_caddyfile() {
     chown root:caddy "$CADDYFILE"
     chmod 0644 "$CADDYFILE"
   fi
+  fmt_caddy_file "$CADDYFILE"
 }
 
 wizard_config() {
@@ -548,6 +561,7 @@ cmd_add_site() {
     chown root:caddy "$site_file"
     chmod 0644 "$site_file"
   fi
+  fmt_caddy_file "$site_file"
 
   if [[ "$DRY_RUN" == "true" ]]; then
     cmd_validate
