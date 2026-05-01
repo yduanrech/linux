@@ -488,12 +488,22 @@ site_content() {
   local upstream="$2"
   local skip_verify="$3"
   local cert_dir="$CADDY_CERTS_DIR/$domain"
+  local log_file="/var/log/caddy/${domain}-access.log"
 
   if [[ "$skip_verify" == "true" ]]; then
     cat <<EOF
 # $MANAGED_MARKER
 $domain {
     tls $cert_dir/fullchain.pem $cert_dir/privkey.pem
+
+    # log {
+    #     output file $log_file {
+    #         roll_size 25MiB
+    #         roll_keep 5
+    #         roll_keep_for 336h
+    #     }
+    #     format json
+    # }
 
     reverse_proxy $upstream {
         transport http {
@@ -507,6 +517,15 @@ EOF
 # $MANAGED_MARKER
 $domain {
     tls $cert_dir/fullchain.pem $cert_dir/privkey.pem
+
+    # log {
+    #     output file $log_file {
+    #         roll_size 25MiB
+    #         roll_keep 5
+    #         roll_keep_for 336h
+    #     }
+    #     format json
+    # }
 
     reverse_proxy $upstream
 }

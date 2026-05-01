@@ -66,7 +66,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 
 - `/etc/caddy-acme.conf`: configuracao persistente, permissao `0600`, com `ACME_EMAIL`, `CF_Token`, `CF_Account_ID` ou `CF_Zone_ID` e `CADDY_CERTS_DIR`.
 - `/etc/caddy/Caddyfile`: arquivo base gerenciado, com `import sites.d/*.caddy`.
-- `/etc/caddy/sites.d/<fqdn>.caddy`: um reverse proxy por host.
+- `/etc/caddy/sites.d/<fqdn>.caddy`: um reverse proxy por host, com bloco de `log` comentado como template opcional.
 - `/etc/caddy/certs/<fqdn>/fullchain.pem`: certificado instalado pelo `acme.sh`.
 - `/etc/caddy/certs/<fqdn>/privkey.pem`: chave privada legivel pelo grupo `caddy`.
 
@@ -95,3 +95,4 @@ Os arquivos gerados pelo script passam por `caddy fmt --overwrite` antes da vali
 - O script atualiza arquivos gerenciados por ele e evita sobrescrever arquivos existentes sem o marcador `Managed by caddy-acme-install.sh`, salvo com `--force`.
 - Use `--dry-run` para ver as acoes sem alterar o sistema.
 - Exemplos prontos de `Caddyfile` ficam em `caddy/examples/`, incluindo PVE, PBS, UniFi, Uptime Kuma e n8n.
+- Os sites gerados incluem um bloco `log` inteiro comentado. Para ativar access log por host, basta descomentar esse bloco.

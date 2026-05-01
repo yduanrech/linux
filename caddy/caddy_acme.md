@@ -61,6 +61,7 @@ Layout de configuração do Caddy:
 - `/etc/caddy/sites.d/<fqdn>.caddy`
   - um host por arquivo
   - `tls /etc/caddy/certs/<fqdn>/fullchain.pem /etc/caddy/certs/<fqdn>/privkey.pem`
+  - bloco `log` comentado por padrão, pronto para ser descomentado se o operador quiser access log por host
   - `reverse_proxy` com suporte opcional a `tls_insecure_skip_verify` para upstream HTTPS interno
 
 Regras de idempotência:
