@@ -32,8 +32,10 @@ Interface pública do script:
   - instala em `/etc/caddy/certs/<fqdn>/fullchain.pem` e `privkey.pem`
   - ajusta permissões para leitura pelo serviço do Caddy
   - executa reload do Caddy ao final
-- `add-site --domain <fqdn> --upstream <url> [--skip-upstream-tls-verify]`
+- `add-site --domain <fqdn> --upstream <url> [--issue-if-missing] [--skip-upstream-tls-verify]`
   - cria ou atualiza um arquivo gerenciado em `/etc/caddy/sites.d/<fqdn>.caddy`
+  - no menu interativo, emite o certificado automaticamente se ele ainda nao existir
+  - no CLI, so emite automaticamente quando `--issue-if-missing` for usado
   - gera um bloco `reverse_proxy` genérico, sem presets específicos para PVE/PBS/UniFi/Kuma
   - referencia o certificado manual daquele FQDN
 - `validate`
@@ -73,8 +75,8 @@ Cenários principais:
 - host Debian/Ubuntu limpo: `init` conclui, instala Caddy/acme.sh e sobe o serviço sem erro
 - reexecução de `init`: não duplica repositório `apt`, não duplica blocos no `Caddyfile`, não perde sites existentes
 - `issue-cert --domain app.example.com`: grava certificados em caminho fixo, com reload automático do Caddy
-- `add-site --domain app.example.com --upstream http://10.0.0.30:3001`: gera fragmento válido e `validate` passa
-- `add-site --domain pve.example.com --upstream https://10.0.0.10:8006 --skip-upstream-tls-verify`: gera transporte HTTPS interno compatível com PVE/PBS
+- `add-site --domain app.example.com --upstream http://10.0.0.30:3001 --issue-if-missing`: emite o certificado se faltar, gera fragmento válido e `validate` passa
+- `add-site --domain pve.example.com --upstream https://10.0.0.10:8006 --issue-if-missing --skip-upstream-tls-verify`: emite o certificado se faltar e gera transporte HTTPS interno compatível com PVE/PBS
 - `--dry-run`: mostra ações sem alterar arquivos gerenciados
 
 Aceite funcional:

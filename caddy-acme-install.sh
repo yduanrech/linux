@@ -54,7 +54,7 @@ Uso:
   $(basename "$0")                         # menu interativo
   $(basename "$0") init [--force] [--dry-run]
   $(basename "$0") issue-cert --domain FQDN [--dry-run]
-  $(basename "$0") add-site --domain FQDN --upstream URL [--skip-upstream-tls-verify] [--force] [--dry-run]
+  $(basename "$0") add-site --domain FQDN --upstream URL [--issue-if-missing] [--skip-upstream-tls-verify] [--force] [--dry-run]
   $(basename "$0") validate
   $(basename "$0") upgrade-acme [--dry-run]
 
@@ -62,7 +62,7 @@ Exemplos com curl:
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)"
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- issue-cert --domain app.example.com
-  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site --domain app.example.com --upstream http://10.0.0.10:3000
+  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site --domain app.example.com --upstream http://10.0.0.10:3000 --issue-if-missing
 
 Subcomandos:
   init          Instala Caddy/acme.sh e prepara /etc/caddy + /etc/caddy-acme.conf
@@ -457,6 +457,19 @@ site_file_for_domain() {
   printf '%s/%s.caddy' "$SITES_DIR" "$domain"
 }
 
+cert_dir_for_domain() {
+  local domain="$1"
+  printf '%s/%s' "$CADDY_CERTS_DIR" "$domain"
+}
+
+cert_files_exist_for_domain() {
+  local domain="$1"
+  local cert_dir
+  cert_dir="$(cert_dir_for_domain "$domain")"
+
+  [[ -f "$cert_dir/fullchain.pem" && -f "$cert_dir/privkey.pem" ]]
+}
+
 site_content() {
   local domain="$1"
   local upstream="$2"
@@ -492,7 +505,8 @@ cmd_add_site() {
   local domain="$1"
   local upstream="$2"
   local skip_verify="$3"
-  local site_file content
+  local issue_if_missing="$4"
+  local site_file content cert_dir backup_file="" had_existing=false validate_status=0
 
   need_root
   load_config
@@ -506,6 +520,15 @@ cmd_add_site() {
   fi
 
   create_base_dirs "$CADDY_CERTS_DIR"
+  cert_dir="$(cert_dir_for_domain "$domain")"
+  if [[ "$DRY_RUN" != "true" ]] && ! cert_files_exist_for_domain "$domain"; then
+    if [[ "$issue_if_missing" == "true" ]]; then
+      log "Certificado ausente para $domain; emitindo antes de criar o site."
+      cmd_issue_cert "$domain"
+    else
+      die "Certificado ausente para $domain em $cert_dir. Rode issue-cert --domain $domain antes de add-site ou use --issue-if-missing."
+    fi
+  fi
   site_file="$(site_file_for_domain "$domain")"
   content="$(site_content "$domain" "$upstream" "$skip_verify")"
 
@@ -515,13 +538,40 @@ cmd_add_site() {
   fi
 
   log "Gravando site $domain -> $upstream"
+  if [[ "$DRY_RUN" != "true" && -f "$site_file" ]]; then
+    had_existing=true
+    backup_file="$(mktemp)"
+    cp -p "$site_file" "$backup_file"
+  fi
   write_file "$site_file" "$content"
   if [[ "$DRY_RUN" != "true" ]]; then
     chown root:caddy "$site_file"
     chmod 0644 "$site_file"
   fi
 
-  cmd_validate
+  if [[ "$DRY_RUN" == "true" ]]; then
+    cmd_validate
+  else
+    set +e
+    cmd_validate
+    validate_status=$?
+    set -e
+
+    if [[ "$validate_status" -ne 0 ]]; then
+      warn "Validacao falhou; restaurando estado anterior de $site_file."
+      if [[ "$had_existing" == "true" ]]; then
+        mv -f "$backup_file" "$site_file"
+        chown root:caddy "$site_file"
+        chmod 0644 "$site_file"
+      else
+        rm -f "$site_file"
+        rm -f "$backup_file"
+      fi
+      die "Configuracao invalida; nenhuma alteracao foi mantida para $domain."
+    fi
+  fi
+
+  rm -f "$backup_file"
   run_cmd systemctl reload caddy
   log "Site configurado: $domain"
 }
@@ -591,11 +641,12 @@ menu() {
         printf '  Dominio: %s\n' "$(normalize_domain "$domain")"
         printf '  Upstream: %s\n' "${upstream%/}"
         printf '  Skip TLS verify: %s\n' "$skip_enabled"
+        printf '  Emitir certificado se faltar: sim\n'
         confirm_action "Confirmar gravacao do site? (y/N): " || die "Operacao cancelada."
         if [[ "$skip_enabled" == "sim" ]]; then
-          cmd_add_site "$domain" "$upstream" "true"
+          cmd_add_site "$domain" "$upstream" "true" "true"
         else
-          cmd_add_site "$domain" "$upstream" "false"
+          cmd_add_site "$domain" "$upstream" "false" "true"
         fi
         ;;
       4)
@@ -652,7 +703,7 @@ parse_common_tail_flags() {
 }
 
 main() {
-  local cmd domain="" upstream="" skip_verify=false
+  local cmd domain="" upstream="" skip_verify=false issue_if_missing=false
   local args=()
   REMAINING_ARGS=()
 
@@ -708,6 +759,10 @@ main() {
             skip_verify=true
             args=("${args[@]:1}")
             ;;
+          --issue-if-missing)
+            issue_if_missing=true
+            args=("${args[@]:1}")
+            ;;
           *)
             die "Argumento invalido para add-site: ${args[0]}"
             ;;
@@ -715,7 +770,7 @@ main() {
       done
       [[ -n "$domain" ]] || die "Use --domain FQDN."
       [[ -n "$upstream" ]] || die "Use --upstream URL."
-      cmd_add_site "$domain" "$upstream" "$skip_verify"
+      cmd_add_site "$domain" "$upstream" "$skip_verify" "$issue_if_missing"
       ;;
     validate)
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para validate."

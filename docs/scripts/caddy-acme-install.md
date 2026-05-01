@@ -20,7 +20,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 
 O `--` apos o `bash -c` e necessario para passar argumentos ao script baixado.
 
-No modo interativo, o script mostra um resumo e pede confirmacao antes de gravar configuracao, emitir certificado ou criar/atualizar um site. No modo CLI com subcomandos, ele executa direto para continuar scriptavel.
+No modo interativo, o script mostra um resumo e pede confirmacao antes de gravar configuracao, emitir certificado ou criar/atualizar um site. Ao adicionar um site pelo menu, ele emite o certificado automaticamente se ainda estiver faltando. No modo CLI com subcomandos, ele executa direto para continuar scriptavel.
 
 ## Fluxo recomendado
 
@@ -33,12 +33,15 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 Adicionar um novo host:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- issue-cert --domain app.example.com
-
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site --domain app.example.com --upstream http://10.0.0.10:3000
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site \
+  --domain app.example.com \
+  --upstream http://10.0.0.10:3000 \
+  --issue-if-missing
 
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- validate
 ```
+
+No modo CLI, `add-site` espera que o certificado do dominio ja exista em `/etc/caddy/certs/<fqdn>/`. Se quiser emitir automaticamente quando estiver faltando, use `--issue-if-missing`.
 
 Adicionar um upstream HTTPS interno com certificado self-signed, comum em PVE/PBS:
 
@@ -46,6 +49,7 @@ Adicionar um upstream HTTPS interno com certificado self-signed, comum em PVE/PB
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site \
   --domain pve.example.com \
   --upstream https://10.0.0.10:8006 \
+  --issue-if-missing \
   --skip-upstream-tls-verify
 ```
 
@@ -54,6 +58,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 - `init`: instala dependencias, repo oficial do Caddy, `caddy`, `acme.sh`, cria `/etc/caddy-acme.conf`, `/etc/caddy/Caddyfile`, `/etc/caddy/sites.d/` e `/etc/caddy/certs/`.
 - `issue-cert --domain FQDN`: emite e instala o certificado em `/etc/caddy/certs/<fqdn>/`.
 - `add-site --domain FQDN --upstream URL`: cria ou atualiza `/etc/caddy/sites.d/<fqdn>.caddy`. O upstream deve ser `http://host:porta` ou `https://host:porta`, sem path.
+- `add-site --issue-if-missing`: emite o certificado antes de gravar o site se ele ainda nao existir.
 - `validate`: executa `caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile`.
 - `upgrade-acme`: atualiza o `acme.sh` pelo atualizador proprio dele.
 
