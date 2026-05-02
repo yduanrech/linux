@@ -345,7 +345,7 @@ normalize_web_server() {
 prompt_acme_web_server_config() {
   local web_server_var="$1"
   local reload_cmd_var="$2"
-  local choice reload_cmd web_server
+  local choice selected_reload_cmd selected_web_server
 
   printf '\nServidor web que usara os certificados:\n'
   printf '  1) Caddy existente (nao instala Caddy)\n'
@@ -355,20 +355,20 @@ prompt_acme_web_server_config() {
   read -r -p "Escolha [1/2/3/4]: " choice
 
   case "$choice" in
-    1) web_server="caddy" ;;
-    2|"") web_server="apache2" ;;
-    3) web_server="nginx" ;;
-    4) web_server="other" ;;
+    1) selected_web_server="caddy" ;;
+    2|"") selected_web_server="apache2" ;;
+    3) selected_web_server="nginx" ;;
+    4) selected_web_server="other" ;;
     *) die "Opcao invalida." ;;
   esac
 
-  reload_cmd="$(default_reload_cmd_for_web_server "$web_server")"
-  if [[ -z "$reload_cmd" ]]; then
-    prompt_required "Comando para recarregar o servico apos renovar certificado: " reload_cmd
+  selected_reload_cmd="$(default_reload_cmd_for_web_server "$selected_web_server")"
+  if [[ -z "$selected_reload_cmd" ]]; then
+    prompt_required "Comando para recarregar o servico apos renovar certificado: " selected_reload_cmd
   fi
 
-  printf -v "$web_server_var" '%s' "$web_server"
-  printf -v "$reload_cmd_var" '%s' "$reload_cmd"
+  printf -v "$web_server_var" '%s' "$selected_web_server"
+  printf -v "$reload_cmd_var" '%s' "$selected_reload_cmd"
 }
 
 create_cert_dirs() {
