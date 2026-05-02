@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # caddy-acme-install.sh
-# Instala Caddy oficial via apt e integra acme.sh + Cloudflare DNS-01.
+# Instala Caddy oficial via apt e/ou integra acme.sh + Cloudflare DNS-01.
 # Sem argumentos: abre menu interativo. Com argumentos: executa subcomandos.
 
 set -euo pipefail
 umask 077
 
-VERSION="1.0"
+VERSION="1.1"
 CONF_FILE="/etc/caddy-acme.conf"
 CADDYFILE="/etc/caddy/Caddyfile"
 SITES_DIR="/etc/caddy/sites.d"
-DEFAULT_CERTS_DIR="/etc/caddy/certs"
+DEFAULT_CERTS_DIR="/etc/ssl/acme-certs"
 MANAGED_MARKER="Managed by caddy-acme-install.sh"
 ACME_SH="/root/.acme.sh/acme.sh"
 
@@ -20,7 +20,9 @@ ACME_EMAIL=""
 CF_Token=""
 CF_Account_ID=""
 CF_Zone_ID=""
-CADDY_CERTS_DIR="$DEFAULT_CERTS_DIR"
+WEB_SERVER="caddy"
+CERTS_DIR=""
+RENEW_RELOAD_CMD="systemctl reload caddy"
 REMAINING_ARGS=()
 
 log() { printf '[INFO] %s\n' "$*"; }
@@ -53,6 +55,7 @@ caddy-acme-install.sh v${VERSION}
 Uso:
   $(basename "$0")                         # menu interativo
   $(basename "$0") init [--force] [--dry-run]
+  $(basename "$0") init-acme [--certs-dir DIR] [--reload-cmd CMD] [--force] [--dry-run]
   $(basename "$0") issue-cert --domain FQDN [--dry-run]
   $(basename "$0") add-site --domain FQDN --upstream URL [--issue-if-missing] [--skip-upstream-tls-verify] [--force] [--dry-run]
   $(basename "$0") validate
@@ -61,11 +64,13 @@ Uso:
 Exemplos com curl:
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)"
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init
+  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- issue-cert --domain app.example.com
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site --domain app.example.com --upstream http://10.0.0.10:3000 --issue-if-missing
 
 Subcomandos:
   init          Instala Caddy/acme.sh e prepara /etc/caddy + /etc/caddy-acme.conf
+  init-acme     Instala/configura apenas acme.sh para Apache2, sem instalar Caddy
   issue-cert    Emite e instala certificado para um FQDN usando Cloudflare DNS-01
   add-site      Cria/atualiza reverse proxy em /etc/caddy/sites.d/<fqdn>.caddy
   validate      Valida o Caddyfile
@@ -167,16 +172,36 @@ validate_upstream() {
   [[ "$upstream" =~ ^https?://[^/[:space:]]+/?$ ]] || die "Upstream invalido. Use http://host:porta ou https://host:porta, sem path."
 }
 
+validate_certs_dir() {
+  local certs_dir="$1"
+
+  [[ "$certs_dir" == /* ]] || die "CERTS_DIR precisa ser um caminho absoluto."
+  [[ "$certs_dir" != *[[:space:]]* ]] || die "CERTS_DIR nao pode conter espacos."
+}
+
 load_config() {
-  [[ -r "$CONF_FILE" ]] || die "Arquivo de configuracao nao encontrado ou ilegivel: $CONF_FILE. Rode init primeiro."
+  [[ -r "$CONF_FILE" ]] || die "Arquivo de configuracao nao encontrado ou ilegivel: $CONF_FILE. Rode init ou init-acme primeiro."
   # shellcheck disable=SC1090
   . "$CONF_FILE"
 
   : "${ACME_EMAIL:?ACME_EMAIL ausente em $CONF_FILE}"
   : "${CF_Token:?CF_Token ausente em $CONF_FILE}"
-  CADDY_CERTS_DIR="${CADDY_CERTS_DIR:-$DEFAULT_CERTS_DIR}"
-  [[ "$CADDY_CERTS_DIR" == /* ]] || die "CADDY_CERTS_DIR precisa ser um caminho absoluto."
-  [[ "$CADDY_CERTS_DIR" != *[[:space:]]* ]] || die "CADDY_CERTS_DIR nao pode conter espacos."
+  WEB_SERVER="${WEB_SERVER:-caddy}"
+  case "$WEB_SERVER" in
+    caddy|apache|none) ;;
+    *) die "WEB_SERVER invalido em $CONF_FILE: $WEB_SERVER" ;;
+  esac
+
+  CERTS_DIR="${CERTS_DIR:-$DEFAULT_CERTS_DIR}"
+  validate_certs_dir "$CERTS_DIR"
+
+  if [[ -z "${RENEW_RELOAD_CMD:-}" ]]; then
+    case "$WEB_SERVER" in
+      caddy) RENEW_RELOAD_CMD="systemctl reload caddy" ;;
+      apache) RENEW_RELOAD_CMD="systemctl reload apache2" ;;
+      none) RENEW_RELOAD_CMD="true" ;;
+    esac
+  fi
 
   if [[ -n "${CF_Account_ID:-}" && -n "${CF_Zone_ID:-}" ]]; then
     die "Defina apenas um entre CF_Account_ID e CF_Zone_ID em $CONF_FILE."
@@ -189,6 +214,15 @@ load_config() {
 detect_debian_like() {
   command -v apt-get >/dev/null 2>&1 || die "Este script requer apt-get."
   [[ -r /etc/debian_version ]] || die "Este script foi feito para Debian/Ubuntu."
+}
+
+ensure_acme_dependencies() {
+  detect_debian_like
+  export DEBIAN_FRONTEND=noninteractive
+
+  log "Instalando dependencias minimas para acme.sh..."
+  run_cmd apt-get update
+  run_cmd apt-get install -y curl ca-certificates
 }
 
 ensure_caddy_repo_and_package() {
@@ -250,6 +284,8 @@ write_config_file() {
   local id_kind="$3"
   local id_value="$4"
   local certs_dir="${5:-$DEFAULT_CERTS_DIR}"
+  local web_server="${6:-caddy}"
+  local reload_cmd="${7:-systemctl reload caddy}"
   local account_id_line="CF_Account_ID="
   local zone_id_line="CF_Zone_ID="
 
@@ -265,7 +301,9 @@ ACME_EMAIL=$(shell_quote "$acme_email")
 CF_Token=$(shell_quote "$cf_token")
 $account_id_line
 $zone_id_line
-CADDY_CERTS_DIR=$(shell_quote "$certs_dir")"
+WEB_SERVER=$(shell_quote "$web_server")
+CERTS_DIR=$(shell_quote "$certs_dir")
+RENEW_RELOAD_CMD=$(shell_quote "$reload_cmd")"
 
   log "Gravando $CONF_FILE..."
   if [[ "$DRY_RUN" == "true" ]]; then
@@ -278,12 +316,24 @@ CADDY_CERTS_DIR=$(shell_quote "$certs_dir")"
   chown root:root "$CONF_FILE"
 }
 
+create_cert_dirs() {
+  local certs_dir="${1:-$DEFAULT_CERTS_DIR}"
+  local web_server="${2:-caddy}"
+
+  validate_certs_dir "$certs_dir"
+  if [[ "$web_server" == "caddy" ]]; then
+    run_cmd install -d -m 0750 -o root -g caddy "$certs_dir"
+  else
+    run_cmd install -d -m 0700 -o root -g root "$certs_dir"
+  fi
+}
+
 create_base_dirs() {
   local certs_dir="${1:-$DEFAULT_CERTS_DIR}"
 
   run_cmd install -d -m 0755 /etc/caddy
   run_cmd install -d -m 0755 "$SITES_DIR"
-  run_cmd install -d -m 0750 -o root -g caddy "$certs_dir"
+  create_cert_dirs "$certs_dir" "caddy"
 }
 
 default_caddyfile_content() {
@@ -336,7 +386,12 @@ ensure_caddyfile() {
 }
 
 wizard_config() {
+  local target_web_server="${1:-caddy}"
+  local target_certs_dir="${2:-$DEFAULT_CERTS_DIR}"
+  local target_reload_cmd="${3:-systemctl reload caddy}"
   local acme_email cf_token id_choice id_value id_kind
+
+  validate_certs_dir "$target_certs_dir"
 
   if [[ -r "$CONF_FILE" && "$FORCE" != "true" ]]; then
     log "$CONF_FILE ja existe. Reutilizando configuracao existente."
@@ -373,17 +428,21 @@ wizard_config() {
   else
     printf '  CF_Zone_ID: %s\n' "$id_value"
   fi
-  printf '  CADDY_CERTS_DIR: %s\n' "$DEFAULT_CERTS_DIR"
+  printf '  WEB_SERVER: %s\n' "$target_web_server"
+  printf '  CERTS_DIR: %s\n' "$target_certs_dir"
+  printf '  RENEW_RELOAD_CMD: %s\n' "$target_reload_cmd"
 
   confirm_action "Confirmar configuracao e continuar? (y/N): " || die "Operacao cancelada."
 
-  write_config_file "$acme_email" "$cf_token" "$id_kind" "$id_value" "$DEFAULT_CERTS_DIR"
+  write_config_file "$acme_email" "$cf_token" "$id_kind" "$id_value" "$target_certs_dir" "$target_web_server" "$target_reload_cmd"
   if [[ "$DRY_RUN" == "true" ]]; then
     ACME_EMAIL="$acme_email"
     CF_Token="$cf_token"
     CF_Account_ID=""
     CF_Zone_ID=""
-    CADDY_CERTS_DIR="$DEFAULT_CERTS_DIR"
+    WEB_SERVER="$target_web_server"
+    CERTS_DIR="$target_certs_dir"
+    RENEW_RELOAD_CMD="$target_reload_cmd"
     if [[ "$id_kind" == "account" ]]; then
       CF_Account_ID="$id_value"
     else
@@ -396,14 +455,28 @@ wizard_config() {
 
 cmd_init() {
   need_root
-  wizard_config
+  wizard_config "caddy" "$DEFAULT_CERTS_DIR" "systemctl reload caddy"
+  [[ "$WEB_SERVER" == "caddy" ]] || die "$CONF_FILE ja existe com WEB_SERVER=$WEB_SERVER. Use --force para recriar configuracao para Caddy."
   ensure_caddy_repo_and_package
-  create_base_dirs "$CADDY_CERTS_DIR"
+  create_base_dirs "$CERTS_DIR"
   ensure_acme_sh "$ACME_EMAIL"
   ensure_caddyfile "$ACME_EMAIL"
   cmd_validate
   run_cmd systemctl reload caddy
   log "Base Caddy + acme.sh concluida."
+}
+
+cmd_init_acme() {
+  local certs_dir="${1:-$DEFAULT_CERTS_DIR}"
+  local reload_cmd="${2:-systemctl reload apache2}"
+
+  need_root
+  wizard_config "apache" "$certs_dir" "$reload_cmd"
+  [[ "$WEB_SERVER" == "apache" ]] || die "$CONF_FILE ja existe com WEB_SERVER=$WEB_SERVER. Use --force para recriar configuracao para Apache/acme.sh."
+  ensure_acme_dependencies
+  create_cert_dirs "$CERTS_DIR" "$WEB_SERVER"
+  ensure_acme_sh "$ACME_EMAIL"
+  log "Base acme.sh concluida sem instalar Caddy."
 }
 
 export_cloudflare_env() {
@@ -417,6 +490,43 @@ export_cloudflare_env() {
   fi
 }
 
+install_domain_cert_dir() {
+  local cert_dir="$1"
+
+  if [[ "$WEB_SERVER" == "caddy" ]]; then
+    run_cmd install -d -m 0750 -o root -g caddy "$cert_dir"
+  else
+    run_cmd install -d -m 0700 -o root -g root "$cert_dir"
+  fi
+}
+
+set_domain_cert_permissions() {
+  local cert_dir="$1"
+
+  if [[ "$WEB_SERVER" == "caddy" ]]; then
+    chown root:caddy "$cert_dir" "$cert_dir/privkey.pem" "$cert_dir/fullchain.pem"
+    chmod 0750 "$cert_dir"
+    chmod 0640 "$cert_dir/privkey.pem" "$cert_dir/fullchain.pem"
+  else
+    chown root:root "$cert_dir" "$cert_dir/privkey.pem" "$cert_dir/fullchain.pem"
+    chmod 0700 "$cert_dir"
+    chmod 0600 "$cert_dir/privkey.pem"
+    chmod 0644 "$cert_dir/fullchain.pem"
+  fi
+}
+
+renew_reload_cmd_for_cert_dir() {
+  local cert_dir="$1"
+
+  if [[ "$WEB_SERVER" == "caddy" ]]; then
+    printf 'chown root:caddy %s %s/privkey.pem %s/fullchain.pem && chmod 750 %s && chmod 640 %s/privkey.pem %s/fullchain.pem && %s' \
+      "$cert_dir" "$cert_dir" "$cert_dir" "$cert_dir" "$cert_dir" "$cert_dir" "$RENEW_RELOAD_CMD"
+  else
+    printf 'chown root:root %s %s/privkey.pem %s/fullchain.pem && chmod 700 %s && chmod 600 %s/privkey.pem && chmod 644 %s/fullchain.pem && %s' \
+      "$cert_dir" "$cert_dir" "$cert_dir" "$cert_dir" "$cert_dir" "$cert_dir" "$RENEW_RELOAD_CMD"
+  fi
+}
+
 cmd_issue_cert() {
   local domain="$1"
   local cert_dir reload_cmd
@@ -425,13 +535,13 @@ cmd_issue_cert() {
   load_config
   domain="$(normalize_domain "$domain")"
   validate_domain "$domain"
-  [[ -x "$ACME_SH" ]] || die "acme.sh nao encontrado em $ACME_SH. Rode init primeiro."
+  [[ -x "$ACME_SH" ]] || die "acme.sh nao encontrado em $ACME_SH. Rode init ou init-acme primeiro."
 
-  cert_dir="$CADDY_CERTS_DIR/$domain"
-  reload_cmd="chown root:caddy $cert_dir $cert_dir/privkey.pem $cert_dir/fullchain.pem && chmod 750 $cert_dir && chmod 640 $cert_dir/privkey.pem $cert_dir/fullchain.pem && systemctl reload caddy"
+  cert_dir="$CERTS_DIR/$domain"
+  reload_cmd="$(renew_reload_cmd_for_cert_dir "$cert_dir")"
 
-  create_base_dirs "$CADDY_CERTS_DIR"
-  run_cmd install -d -m 0750 -o root -g caddy "$cert_dir"
+  create_cert_dirs "$CERTS_DIR" "$WEB_SERVER"
+  install_domain_cert_dir "$cert_dir"
   export_cloudflare_env
 
   log "Emitindo certificado para $domain via Cloudflare DNS-01..."
@@ -458,11 +568,12 @@ cmd_issue_cert() {
     --reloadcmd "$reload_cmd"
 
   if [[ "$DRY_RUN" != "true" ]]; then
-    chown root:caddy "$cert_dir" "$cert_dir/privkey.pem" "$cert_dir/fullchain.pem"
-    chmod 0750 "$cert_dir"
-    chmod 0640 "$cert_dir/privkey.pem" "$cert_dir/fullchain.pem"
+    set_domain_cert_permissions "$cert_dir"
   fi
   log "Certificado pronto para $domain."
+  if [[ "$WEB_SERVER" == "apache" ]]; then
+    log "Apache: use SSLCertificateFile $cert_dir/fullchain.pem e SSLCertificateKeyFile $cert_dir/privkey.pem."
+  fi
 }
 
 site_file_for_domain() {
@@ -472,7 +583,7 @@ site_file_for_domain() {
 
 cert_dir_for_domain() {
   local domain="$1"
-  printf '%s/%s' "$CADDY_CERTS_DIR" "$domain"
+  printf '%s/%s' "$CERTS_DIR" "$domain"
 }
 
 cert_files_exist_for_domain() {
@@ -487,7 +598,7 @@ site_content() {
   local domain="$1"
   local upstream="$2"
   local skip_verify="$3"
-  local cert_dir="$CADDY_CERTS_DIR/$domain"
+  local cert_dir="$CERTS_DIR/$domain"
   local log_file="/var/log/caddy/${domain}-access.log"
 
   if [[ "$skip_verify" == "true" ]]; then
@@ -542,6 +653,7 @@ cmd_add_site() {
 
   need_root
   load_config
+  [[ "$WEB_SERVER" == "caddy" ]] || die "add-site esta disponivel apenas para configuracao WEB_SERVER=caddy. Para Apache, use issue-cert e configure o VirtualHost."
   domain="$(normalize_domain "$domain")"
   upstream="${upstream%/}"
   validate_domain "$domain"
@@ -551,7 +663,7 @@ cmd_add_site() {
     die "--skip-upstream-tls-verify exige upstream https://."
   fi
 
-  create_base_dirs "$CADDY_CERTS_DIR"
+  create_base_dirs "$CERTS_DIR"
   cert_dir="$(cert_dir_for_domain "$domain")"
   if [[ "$DRY_RUN" != "true" ]] && ! cert_files_exist_for_domain "$domain"; then
     if [[ "$issue_if_missing" == "true" ]]; then
@@ -624,7 +736,7 @@ cmd_validate() {
 
 cmd_upgrade_acme() {
   need_root
-  [[ -x "$ACME_SH" ]] || die "acme.sh nao encontrado em $ACME_SH. Rode init primeiro."
+  [[ -x "$ACME_SH" ]] || die "acme.sh nao encontrado em $ACME_SH. Rode init ou init-acme primeiro."
   log "Atualizando acme.sh..."
   run_cmd "$ACME_SH" --upgrade
 }
@@ -640,11 +752,12 @@ menu() {
     [[ "$DRY_RUN" == "true" ]] && printf ' [DRY-RUN]\n'
     printf '=======================================\n'
     printf ' 1) Init / instalar base\n'
-    printf ' 2) Emitir certificado\n'
-    printf ' 3) Adicionar ou atualizar site\n'
-    printf ' 4) Validar Caddyfile\n'
-    printf ' 5) Atualizar acme.sh\n'
-    printf ' 6) Ajuda\n'
+    printf ' 2) Init acme.sh apenas / Apache2\n'
+    printf ' 3) Emitir certificado\n'
+    printf ' 4) Adicionar ou atualizar site\n'
+    printf ' 5) Validar Caddyfile\n'
+    printf ' 6) Atualizar acme.sh\n'
+    printf ' 7) Ajuda\n'
     printf ' 0) Sair\n'
     printf '\n'
     read -r -p "Escolha: " choice
@@ -654,6 +767,9 @@ menu() {
         cmd_init
         ;;
       2)
+        cmd_init_acme "$DEFAULT_CERTS_DIR" "systemctl reload apache2"
+        ;;
+      3)
         prompt_required "FQDN (ex: app.example.com): " domain
         printf '\nResumo:\n'
         printf '  Acao: emitir certificado\n'
@@ -661,7 +777,7 @@ menu() {
         confirm_action "Confirmar emissao? (y/N): " || die "Operacao cancelada."
         cmd_issue_cert "$domain"
         ;;
-      3)
+      4)
         prompt_required "FQDN (ex: app.example.com): " domain
         prompt_required "Upstream (ex: http://10.0.0.10:3000): " upstream
         read -r -p "Ignorar validacao TLS do upstream HTTPS? (y/N): " skip
@@ -682,13 +798,13 @@ menu() {
           cmd_add_site "$domain" "$upstream" "false" "true"
         fi
         ;;
-      4)
+      5)
         cmd_validate
         ;;
-      5)
+      6)
         cmd_upgrade_acme
         ;;
-      6)
+      7)
         usage
         ;;
       0)
@@ -737,6 +853,7 @@ parse_common_tail_flags() {
 
 main() {
   local cmd domain="" upstream="" skip_verify=false issue_if_missing=false
+  local init_certs_dir="$DEFAULT_CERTS_DIR" init_reload_cmd="systemctl reload apache2"
   local args=()
   REMAINING_ARGS=()
 
@@ -758,6 +875,26 @@ main() {
     init)
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para init."
       cmd_init
+      ;;
+    init-acme)
+      while [[ ${#args[@]} -gt 0 ]]; do
+        case "${args[0]}" in
+          --certs-dir)
+            [[ ${#args[@]} -ge 2 ]] || die "--certs-dir requer valor."
+            init_certs_dir="${args[1]}"
+            args=("${args[@]:2}")
+            ;;
+          --reload-cmd)
+            [[ ${#args[@]} -ge 2 ]] || die "--reload-cmd requer valor."
+            init_reload_cmd="${args[1]}"
+            args=("${args[@]:2}")
+            ;;
+          *)
+            die "Argumento invalido para init-acme: ${args[0]}"
+            ;;
+        esac
+      done
+      cmd_init_acme "$init_certs_dir" "$init_reload_cmd"
       ;;
     issue-cert)
       while [[ ${#args[@]} -gt 0 ]]; do

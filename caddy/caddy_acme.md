@@ -4,7 +4,7 @@
 Criar um script raiz, idempotente e orientado por menu interativo + subcomandos para Debian/Ubuntu, focado em:
 - instalar o Caddy pelo repositório oficial `apt`
 - instalar e configurar `acme.sh` para emissão DNS-01 via Cloudflare
-- usar certificados manuais em disco no Caddy
+- usar certificados manuais em disco no Caddy ou Apache2
 - manter a configuração modular em `/etc/caddy/Caddyfile` + `/etc/caddy/sites.d/*.caddy`
 - priorizar certificados por host/FQDN, não wildcard, nesta v1
 
@@ -23,15 +23,19 @@ Interface pública do script:
   - wizard inicial quando chamado diretamente ou via menu
   - instala dependências, repo oficial do Caddy, `caddy`, `acme.sh`
   - cria `/etc/caddy-acme.conf` com permissões `0600`
-  - cria `/etc/caddy/Caddyfile`, `/etc/caddy/sites.d/`, `/etc/caddy/certs/`
+  - cria `/etc/caddy/Caddyfile`, `/etc/caddy/sites.d/` e `CERTS_DIR`
   - habilita/inicia `caddy`
+- `init-acme`
+  - wizard inicial para usar apenas `acme.sh`, sem instalar Caddy
+  - instala dependências mínimas do `acme.sh`
+  - usa `WEB_SERVER=apache`, `CERTS_DIR=/etc/ssl/acme-certs` e reload padrão `systemctl reload apache2`
 - `issue-cert --domain <fqdn>`
   - carrega `/etc/caddy-acme.conf`
   - exporta `CF_Token` e exatamente um entre `CF_Account_ID` ou `CF_Zone_ID`
   - emite o certificado do FQDN via `acme.sh --issue --dns dns_cf -d <fqdn>`
-  - instala em `/etc/caddy/certs/<fqdn>/fullchain.pem` e `privkey.pem`
-  - ajusta permissões para leitura pelo serviço do Caddy
-  - executa reload do Caddy ao final
+  - instala em `CERTS_DIR/<fqdn>/fullchain.pem` e `privkey.pem`
+  - ajusta permissões conforme o serviço configurado
+  - executa reload do serviço configurado ao final
 - `add-site --domain <fqdn> --upstream <url> [--issue-if-missing] [--skip-upstream-tls-verify]`
   - cria ou atualiza um arquivo gerenciado em `/etc/caddy/sites.d/<fqdn>.caddy`
   - no menu interativo, emite o certificado automaticamente se ele ainda nao existir
@@ -52,7 +56,9 @@ Arquivo de configuração persistente:
   - `ACME_EMAIL`
   - `CF_Token`
   - `CF_Account_ID` ou `CF_Zone_ID`
-  - `CADDY_CERTS_DIR=/etc/caddy/certs`
+  - `WEB_SERVER=caddy|apache`
+  - `CERTS_DIR=/etc/ssl/acme-certs`
+  - `RENEW_RELOAD_CMD`
 
 Layout de configuração do Caddy:
 - `/etc/caddy/Caddyfile`
@@ -60,7 +66,7 @@ Layout de configuração do Caddy:
   - `import sites.d/*.caddy`
 - `/etc/caddy/sites.d/<fqdn>.caddy`
   - um host por arquivo
-  - `tls /etc/caddy/certs/<fqdn>/fullchain.pem /etc/caddy/certs/<fqdn>/privkey.pem`
+  - `tls /etc/ssl/acme-certs/<fqdn>/fullchain.pem /etc/ssl/acme-certs/<fqdn>/privkey.pem`
   - bloco `log` comentado por padrão, pronto para ser descomentado se o operador quiser access log por host
   - `reverse_proxy` com suporte opcional a `tls_insecure_skip_verify` para upstream HTTPS interno
 
@@ -75,7 +81,7 @@ Regras de idempotência:
 Cenários principais:
 - host Debian/Ubuntu limpo: `init` conclui, instala Caddy/acme.sh e sobe o serviço sem erro
 - reexecução de `init`: não duplica repositório `apt`, não duplica blocos no `Caddyfile`, não perde sites existentes
-- `issue-cert --domain app.example.com`: grava certificados em caminho fixo, com reload automático do Caddy
+- `issue-cert --domain app.example.com`: grava certificados em caminho fixo, com reload automático do serviço configurado
 - `add-site --domain app.example.com --upstream http://10.0.0.30:3001 --issue-if-missing`: emite o certificado se faltar, gera fragmento válido e `validate` passa
 - `add-site --domain pve.example.com --upstream https://10.0.0.10:8006 --issue-if-missing --skip-upstream-tls-verify`: emite o certificado se faltar e gera transporte HTTPS interno compatível com PVE/PBS
 - `--dry-run`: mostra ações sem alterar arquivos gerenciados
@@ -84,7 +90,7 @@ Aceite funcional:
 - Caddy permanece atualizável via `apt upgrade`
 - `acme.sh` fica atualizável pelo subcomando `upgrade-acme`
 - nenhum plugin Cloudflare no Caddy
-- renovação do `acme.sh` recarrega o Caddy automaticamente
+- renovação do `acme.sh` recarrega o serviço configurado automaticamente
 - sem argumentos, o script abre um menu interativo utilizável para bootstrap e manutenção simples
 - com argumentos, o script permite operação não interativa e previsível
 - o operador consegue adicionar um host novo com no máximo:
@@ -95,7 +101,7 @@ Aceite funcional:
 ## Assumptions e defaults
 - alvo: Debian/Ubuntu apenas
 - fonte do Caddy: repositório oficial do Caddy via `apt`
-- `acme.sh` ficará no local padrão do root e usará o agendador nativo dele; a v1 não cria timer systemd próprio
+- `acme.sh` ficará no local padrão do root e usará o agendador nativo dele; o script não cria timer systemd próprio
 - a v1 implementa apenas certificados por host/FQDN; wildcard fica fora do escopo inicial
 - o script será genérico para reverse proxy; não haverá presets opinionados para serviços específicos nesta primeira versão
 - a UX padrão será híbrida:
@@ -103,7 +109,7 @@ Aceite funcional:
   - com args: subcomandos/parâmetros
 - permissões esperadas:
   - `/etc/caddy-acme.conf` `0600 root:root`
-  - diretórios de certificados com grupo legível pelo serviço do Caddy
+  - diretórios de certificados com permissões compatíveis com o serviço configurado
   - chaves privadas nunca world-readable
 
 Referências oficiais usadas no desenho:
