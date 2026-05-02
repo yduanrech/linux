@@ -55,7 +55,7 @@ caddy-acme-install.sh v${VERSION}
 Uso:
   $(basename "$0")                         # menu interativo
   $(basename "$0") init [--force] [--dry-run]
-  $(basename "$0") init-acme [--certs-dir DIR] [--reload-cmd CMD] [--force] [--dry-run]
+  $(basename "$0") init-acme [--web-server caddy|apache2|nginx|other] [--certs-dir DIR] [--reload-cmd CMD] [--force] [--dry-run]
   $(basename "$0") issue-cert --domain FQDN [--dry-run]
   $(basename "$0") add-site --domain FQDN --upstream URL [--issue-if-missing] [--skip-upstream-tls-verify] [--force] [--dry-run]
   $(basename "$0") validate
@@ -65,12 +65,13 @@ Exemplos com curl:
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)"
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme
+  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme --web-server nginx
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- issue-cert --domain app.example.com
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- add-site --domain app.example.com --upstream http://10.0.0.10:3000 --issue-if-missing
 
 Subcomandos:
   init          Instala Caddy/acme.sh e prepara /etc/caddy + /etc/caddy-acme.conf
-  init-acme     Instala/configura apenas acme.sh para Apache2, sem instalar Caddy
+  init-acme     Instala/configura apenas acme.sh, sem instalar Caddy
   issue-cert    Emite e instala certificado para um FQDN usando Cloudflare DNS-01
   add-site      Cria/atualiza reverse proxy em /etc/caddy/sites.d/<fqdn>.caddy
   validate      Valida o Caddyfile
@@ -187,8 +188,9 @@ load_config() {
   : "${ACME_EMAIL:?ACME_EMAIL ausente em $CONF_FILE}"
   : "${CF_Token:?CF_Token ausente em $CONF_FILE}"
   WEB_SERVER="${WEB_SERVER:-caddy}"
+  [[ "$WEB_SERVER" == "apache" ]] && WEB_SERVER="apache2"
   case "$WEB_SERVER" in
-    caddy|apache|none) ;;
+    caddy|apache2|nginx|other|none) ;;
     *) die "WEB_SERVER invalido em $CONF_FILE: $WEB_SERVER" ;;
   esac
 
@@ -198,8 +200,10 @@ load_config() {
   if [[ -z "${RENEW_RELOAD_CMD:-}" ]]; then
     case "$WEB_SERVER" in
       caddy) RENEW_RELOAD_CMD="systemctl reload caddy" ;;
-      apache) RENEW_RELOAD_CMD="systemctl reload apache2" ;;
+      apache2) RENEW_RELOAD_CMD="systemctl reload apache2" ;;
+      nginx) RENEW_RELOAD_CMD="systemctl reload nginx" ;;
       none) RENEW_RELOAD_CMD="true" ;;
+      other) RENEW_RELOAD_CMD="true" ;;
     esac
   fi
 
@@ -316,6 +320,57 @@ RENEW_RELOAD_CMD=$(shell_quote "$reload_cmd")"
   chown root:root "$CONF_FILE"
 }
 
+default_reload_cmd_for_web_server() {
+  local web_server="$1"
+
+  case "$web_server" in
+    caddy) printf 'systemctl reload caddy' ;;
+    apache|apache2) printf 'systemctl reload apache2' ;;
+    nginx) printf 'systemctl reload nginx' ;;
+    none) printf 'true' ;;
+    *) printf '' ;;
+  esac
+}
+
+normalize_web_server() {
+  local web_server="$1"
+
+  case "$web_server" in
+    apache) printf 'apache2' ;;
+    caddy|apache2|nginx|other|none) printf '%s' "$web_server" ;;
+    *) die "Servidor web invalido: $web_server" ;;
+  esac
+}
+
+prompt_acme_web_server_config() {
+  local web_server_var="$1"
+  local reload_cmd_var="$2"
+  local choice reload_cmd web_server
+
+  printf '\nServidor web que usara os certificados:\n'
+  printf '  1) Caddy existente (nao instala Caddy)\n'
+  printf '  2) Apache2\n'
+  printf '  3) Nginx\n'
+  printf '  4) Outro\n'
+  read -r -p "Escolha [1/2/3/4]: " choice
+
+  case "$choice" in
+    1) web_server="caddy" ;;
+    2|"") web_server="apache2" ;;
+    3) web_server="nginx" ;;
+    4) web_server="other" ;;
+    *) die "Opcao invalida." ;;
+  esac
+
+  reload_cmd="$(default_reload_cmd_for_web_server "$web_server")"
+  if [[ -z "$reload_cmd" ]]; then
+    prompt_required "Comando para recarregar o servico apos renovar certificado: " reload_cmd
+  fi
+
+  printf -v "$web_server_var" '%s' "$web_server"
+  printf -v "$reload_cmd_var" '%s' "$reload_cmd"
+}
+
 create_cert_dirs() {
   local certs_dir="${1:-$DEFAULT_CERTS_DIR}"
   local web_server="${2:-caddy}"
@@ -391,6 +446,7 @@ wizard_config() {
   local target_reload_cmd="${3:-systemctl reload caddy}"
   local acme_email cf_token id_choice id_value id_kind
 
+  target_web_server="$(normalize_web_server "$target_web_server")"
   validate_certs_dir "$target_certs_dir"
 
   if [[ -r "$CONF_FILE" && "$FORCE" != "true" ]]; then
@@ -468,11 +524,26 @@ cmd_init() {
 
 cmd_init_acme() {
   local certs_dir="${1:-$DEFAULT_CERTS_DIR}"
-  local reload_cmd="${2:-systemctl reload apache2}"
+  local reload_cmd="${2:-}"
+  local web_server="${3:-}"
 
   need_root
-  wizard_config "apache" "$certs_dir" "$reload_cmd"
-  [[ "$WEB_SERVER" == "apache" ]] || die "$CONF_FILE ja existe com WEB_SERVER=$WEB_SERVER. Use --force para recriar configuracao para Apache/acme.sh."
+  if [[ -r "$CONF_FILE" && "$FORCE" != "true" ]]; then
+    wizard_config "other" "$certs_dir" "true"
+  else
+    if [[ -z "$web_server" && -n "$reload_cmd" ]]; then
+      web_server="other"
+    fi
+    if [[ -z "$web_server" ]]; then
+      prompt_acme_web_server_config web_server reload_cmd
+    else
+      web_server="$(normalize_web_server "$web_server")"
+      reload_cmd="${reload_cmd:-$(default_reload_cmd_for_web_server "$web_server")}"
+      [[ -n "$reload_cmd" ]] || die "--reload-cmd e obrigatorio quando --web-server other."
+    fi
+    wizard_config "$web_server" "$certs_dir" "$reload_cmd"
+  fi
+  [[ "$WEB_SERVER" != "caddy" ]] || warn "init-acme configurou acme.sh para Caddy existente; ele nao instala o Caddy."
   ensure_acme_dependencies
   create_cert_dirs "$CERTS_DIR" "$WEB_SERVER"
   ensure_acme_sh "$ACME_EMAIL"
@@ -571,8 +642,10 @@ cmd_issue_cert() {
     set_domain_cert_permissions "$cert_dir"
   fi
   log "Certificado pronto para $domain."
-  if [[ "$WEB_SERVER" == "apache" ]]; then
+  if [[ "$WEB_SERVER" == "apache2" ]]; then
     log "Apache: use SSLCertificateFile $cert_dir/fullchain.pem e SSLCertificateKeyFile $cert_dir/privkey.pem."
+  elif [[ "$WEB_SERVER" == "nginx" ]]; then
+    log "Nginx: use ssl_certificate $cert_dir/fullchain.pem; e ssl_certificate_key $cert_dir/privkey.pem;"
   fi
 }
 
@@ -653,7 +726,7 @@ cmd_add_site() {
 
   need_root
   load_config
-  [[ "$WEB_SERVER" == "caddy" ]] || die "add-site esta disponivel apenas para configuracao WEB_SERVER=caddy. Para Apache, use issue-cert e configure o VirtualHost."
+  [[ "$WEB_SERVER" == "caddy" ]] || die "add-site esta disponivel apenas para WEB_SERVER=caddy. Para outros servidores, use issue-cert e configure o virtual host/server block."
   domain="$(normalize_domain "$domain")"
   upstream="${upstream%/}"
   validate_domain "$domain"
@@ -752,7 +825,7 @@ menu() {
     [[ "$DRY_RUN" == "true" ]] && printf ' [DRY-RUN]\n'
     printf '=======================================\n'
     printf ' 1) Init / instalar base\n'
-    printf ' 2) Init acme.sh apenas / Apache2\n'
+    printf ' 2) Init acme.sh apenas / escolher servidor web\n'
     printf ' 3) Emitir certificado\n'
     printf ' 4) Adicionar ou atualizar site\n'
     printf ' 5) Validar Caddyfile\n'
@@ -767,7 +840,7 @@ menu() {
         cmd_init
         ;;
       2)
-        cmd_init_acme "$DEFAULT_CERTS_DIR" "systemctl reload apache2"
+        cmd_init_acme "$DEFAULT_CERTS_DIR"
         ;;
       3)
         prompt_required "FQDN (ex: app.example.com): " domain
@@ -853,7 +926,7 @@ parse_common_tail_flags() {
 
 main() {
   local cmd domain="" upstream="" skip_verify=false issue_if_missing=false
-  local init_certs_dir="$DEFAULT_CERTS_DIR" init_reload_cmd="systemctl reload apache2"
+  local init_certs_dir="$DEFAULT_CERTS_DIR" init_reload_cmd="" init_web_server=""
   local args=()
   REMAINING_ARGS=()
 
@@ -889,12 +962,17 @@ main() {
             init_reload_cmd="${args[1]}"
             args=("${args[@]:2}")
             ;;
+          --web-server)
+            [[ ${#args[@]} -ge 2 ]] || die "--web-server requer valor."
+            init_web_server="${args[1]}"
+            args=("${args[@]:2}")
+            ;;
           *)
             die "Argumento invalido para init-acme: ${args[0]}"
             ;;
         esac
       done
-      cmd_init_acme "$init_certs_dir" "$init_reload_cmd"
+      cmd_init_acme "$init_certs_dir" "$init_reload_cmd" "$init_web_server"
       ;;
     issue-cert)
       while [[ ${#args[@]} -gt 0 ]]; do

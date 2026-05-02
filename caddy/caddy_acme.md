@@ -4,7 +4,7 @@
 Criar um script raiz, idempotente e orientado por menu interativo + subcomandos para Debian/Ubuntu, focado em:
 - instalar o Caddy pelo repositório oficial `apt`
 - instalar e configurar `acme.sh` para emissão DNS-01 via Cloudflare
-- usar certificados manuais em disco no Caddy ou Apache2
+- usar certificados manuais em disco no Caddy, Apache2, Nginx ou outro servico
 - manter a configuração modular em `/etc/caddy/Caddyfile` + `/etc/caddy/sites.d/*.caddy`
 - priorizar certificados por host/FQDN, não wildcard, nesta v1
 
@@ -28,7 +28,8 @@ Interface pública do script:
 - `init-acme`
   - wizard inicial para usar apenas `acme.sh`, sem instalar Caddy
   - instala dependências mínimas do `acme.sh`
-  - usa `WEB_SERVER=apache`, `CERTS_DIR=/etc/ssl/acme-certs` e reload padrão `systemctl reload apache2`
+  - pergunta ou recebe `WEB_SERVER=caddy|apache2|nginx|other`
+  - usa `CERTS_DIR=/etc/ssl/acme-certs` e reload padrão conforme o servidor escolhido
 - `issue-cert --domain <fqdn>`
   - carrega `/etc/caddy-acme.conf`
   - exporta `CF_Token` e exatamente um entre `CF_Account_ID` ou `CF_Zone_ID`
@@ -56,7 +57,7 @@ Arquivo de configuração persistente:
   - `ACME_EMAIL`
   - `CF_Token`
   - `CF_Account_ID` ou `CF_Zone_ID`
-  - `WEB_SERVER=caddy|apache`
+  - `WEB_SERVER=caddy|apache2|nginx|other`
   - `CERTS_DIR=/etc/ssl/acme-certs`
   - `RENEW_RELOAD_CMD`
 

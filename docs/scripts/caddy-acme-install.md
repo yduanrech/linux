@@ -3,7 +3,7 @@
 Instala o Caddy oficial via `apt` e/ou configura certificados com `acme.sh` usando Cloudflare DNS-01.
 
 O Caddy usa certificados prontos em disco com `tls cert key`; ele nao precisa de plugin Cloudflare nem build customizado.
-Tambem existe um modo `init-acme` para usar apenas `acme.sh` com Apache2, sem instalar Caddy.
+Tambem existe um modo `init-acme` para usar apenas `acme.sh`, sem instalar Caddy, com reload configuravel para Caddy existente, Apache2, Nginx ou outro servico.
 
 ## Executar
 
@@ -19,7 +19,7 @@ Modo direto com subcomandos:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init
 ```
 
-Modo apenas `acme.sh` para Apache2:
+Modo apenas `acme.sh`, sem instalar Caddy:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme
@@ -63,12 +63,19 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
   --skip-upstream-tls-verify
 ```
 
-### Apenas acme.sh / Apache2
+### Apenas acme.sh / Outros servidores
 
 Primeira execucao sem instalar Caddy:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme
+```
+
+No modo interativo, o script pergunta qual servidor vai consumir os certificados: Caddy existente, Apache2, Nginx ou outro.
+No modo CLI, informe com `--web-server`:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme --web-server nginx
 ```
 
 Emitir certificado:
@@ -96,6 +103,18 @@ Exemplo minimo de VirtualHost Apache:
 </VirtualHost>
 ```
 
+Exemplo minimo de Nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name app.example.com;
+
+    ssl_certificate /etc/ssl/acme-certs/app.example.com/fullchain.pem;
+    ssl_certificate_key /etc/ssl/acme-certs/app.example.com/privkey.pem;
+}
+```
+
 Se necessario, habilite SSL no Apache:
 
 ```bash
@@ -103,18 +122,28 @@ a2enmod ssl
 systemctl reload apache2
 ```
 
-O reload gravado para renovacoes nesse modo e `systemctl reload apache2`. Para customizar:
+O reload gravado para renovacoes depende do servidor escolhido:
+
+```text
+caddy    -> systemctl reload caddy
+apache2  -> systemctl reload apache2
+nginx    -> systemctl reload nginx
+other    -> exige --reload-cmd ou prompt interativo
+```
+
+Para customizar:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- init-acme \
+  --web-server other \
   --certs-dir /etc/ssl/acme-certs \
-  --reload-cmd "systemctl reload apache2"
+  --reload-cmd "systemctl reload meu-servico"
 ```
 
 ## Subcomandos
 
 - `init`: instala dependencias, repo oficial do Caddy, `caddy`, `acme.sh`, cria `/etc/caddy-acme.conf`, `/etc/caddy/Caddyfile`, `/etc/caddy/sites.d/` e `CERTS_DIR`.
-- `init-acme`: instala/configura apenas `acme.sh` para Apache2, sem instalar Caddy. O padrao e `CERTS_DIR=/etc/ssl/acme-certs` e `RENEW_RELOAD_CMD=systemctl reload apache2`.
+- `init-acme`: instala/configura apenas `acme.sh`, sem instalar Caddy. Suporta `--web-server caddy|apache2|nginx|other`, `--certs-dir` e `--reload-cmd`.
 - `issue-cert --domain FQDN`: emite e instala o certificado em `CERTS_DIR/<fqdn>/`.
 - `add-site --domain FQDN --upstream URL`: cria ou atualiza `/etc/caddy/sites.d/<fqdn>.caddy`. O upstream deve ser `http://host:porta` ou `https://host:porta`, sem path.
 - `add-site --issue-if-missing`: emite o certificado antes de gravar o site se ele ainda nao existir.
@@ -143,7 +172,7 @@ Atualizar o `acme.sh`:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)" -- upgrade-acme
 ```
 
-As renovacoes dos certificados ficam a cargo do agendador criado pelo proprio `acme.sh`. O comando `--install-cert` grava um reload command para ajustar permissoes e recarregar o servico configurado apos renovacoes: Caddy no modo `init`, Apache2 no modo `init-acme`.
+As renovacoes dos certificados ficam a cargo do agendador criado pelo proprio `acme.sh`. O comando `--install-cert` grava um reload command para ajustar permissoes e recarregar o servico configurado apos renovacoes.
 
 Os arquivos gerados pelo script passam por `caddy fmt --overwrite` antes da validacao, para manter o formato padrao do Caddy.
 
@@ -153,6 +182,6 @@ Os arquivos gerados pelo script passam por `caddy fmt --overwrite` antes da vali
 - Esta versao nao implementa wildcard; o fluxo principal e um certificado por FQDN.
 - O script atualiza arquivos gerenciados por ele e evita sobrescrever arquivos existentes sem o marcador `Managed by caddy-acme-install.sh`, salvo com `--force`.
 - Use `--dry-run` para ver as acoes sem alterar o sistema.
-- `add-site` e `validate` sao operacoes especificas do Caddy. No modo Apache, use `issue-cert` e configure o VirtualHost manualmente ou pela aplicacao.
+- `add-site` e `validate` sao operacoes especificas do Caddy. Para outros servidores, use `issue-cert` e configure o virtual host/server block manualmente ou pela aplicacao.
 - Exemplos prontos de `Caddyfile` ficam em `caddy/examples/`, incluindo PVE, PBS, UniFi, Uptime Kuma e n8n.
 - Os sites gerados incluem um bloco `log` inteiro comentado. Para ativar access log por host, basta descomentar esse bloco.
