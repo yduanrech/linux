@@ -12,6 +12,7 @@ Scripts de automação para Ubuntu/Debian (setup inicial, updates, observabilida
 | `btop-install.sh` | Instala `btop` (x86_64/aarch64) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/btop-install.sh)"` |
 | `caddy-acme-install.sh` | Instala Caddy oficial + acme.sh ou apenas acme.sh para outros servidores web com Cloudflare DNS-01 | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)"` |
 | `n8n-install.sh` | Instala/atualiza `n8n` com serviço systemd | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/n8n-install.sh)"` |
+| `gickup-install.sh` | Instala/atualiza Gickup linux amd64 para mirror GitHub -> Codeberg com systemd | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)"` |
 | `individuais/autologout-install.sh` | Configura autologout global (`TMOUT=900`) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/autologout-install.sh)"` |
 | `individuais/limit-journal.sh` | Ajusta retenção e tamanho do `journald` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/limit-journal.sh)"` |
 | `mariadb-backup/mariadb_backup.sh` | Backup lógico MariaDB com envio opcional ao PBS | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/mariadb-backup/mariadb_backup.sh)"` |
@@ -25,6 +26,7 @@ Scripts de automação para Ubuntu/Debian (setup inicial, updates, observabilida
 - `docs/scripts/btop-install.md`
 - `docs/scripts/caddy-acme-install.md`
 - `docs/scripts/n8n-install.md`
+- `docs/scripts/gickup-install.md`
 - `docs/scripts/autologout-install.md`
 - `docs/scripts/limit-journal.md`
 - `docs/scripts/mariadb-backup.md`
