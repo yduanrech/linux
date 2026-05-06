@@ -28,6 +28,7 @@ CONFIG_CRON="0 3 * * *"
 CONFIG_GITHUB_OWNER="CHANGE_ME_GITHUB_USER_OR_ORG"
 CONFIG_GITHUB_REPOS="CHANGE_ME_REPOSITORY_NAME"
 CONFIG_CODEBERG_OWNER="CHANGE_ME_CODEBERG_USER_OR_ORG"
+CONFIG_HEARTBEAT_URLS=""
 
 log() { printf '[INFO] %s\n' "$*"; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
@@ -60,7 +61,11 @@ gickup-install.sh v${VERSION}
 Uso:
   $(basename "$0")                         # menu interativo
   $(basename "$0") init [--force] [--dry-run]
+                       [--cron EXPR] [--github-owner OWNER] [--github-repos "repo1 repo2"]
+                       [--codeberg-owner OWNER] [--healthchecks-url URL[,URL2]]
   $(basename "$0") configure [--force] [--dry-run]
+                            [--cron EXPR] [--github-owner OWNER] [--github-repos "repo1 repo2"]
+                            [--codeberg-owner OWNER] [--healthchecks-url URL[,URL2]]
   $(basename "$0") update-binary [--dry-run]
   $(basename "$0") validate-config [--dry-run]
   $(basename "$0") run-now [--dry-run]
@@ -71,6 +76,7 @@ Uso:
 Exemplos com curl:
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)"
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- init
+  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- init --cron "0 */3 * * *" --github-owner yduanrech --github-repos "orbys" --codeberg-owner yduanrech
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- configure --force
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- validate-config
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- run-now
@@ -99,6 +105,21 @@ repo_list_yaml() {
 
   for repo in $CONFIG_GITHUB_REPOS; do
     printf '        - %s\n' "$repo"
+  done
+}
+
+heartbeat_urls_yaml() {
+  local url
+
+  [[ -n "$CONFIG_HEARTBEAT_URLS" ]] || return 0
+
+  cat <<EOF
+metrics:
+  heartbeat:
+    urls:
+EOF
+  for url in $CONFIG_HEARTBEAT_URLS; do
+    printf '      - %s\n' "$url"
   done
 }
 
@@ -253,6 +274,8 @@ log:
     file: gickup.log
     maxage: 7
 
+$(heartbeat_urls_yaml)
+
 source:
   github:
     - token: GICKUP_GITHUB_TOKEN
@@ -335,23 +358,33 @@ normalize_repo_list() {
   printf '%s' $value
 }
 
+normalize_url_list() {
+  local value="$1"
+
+  value="${value//,/ }"
+  # shellcheck disable=SC2086
+  printf '%s' $value
+}
+
 prompt_cron_config() {
   local choice custom_cron
 
   printf '\nAgendamento do Gickup:\n'
   printf '  1) A cada 1 hora\n'
-  printf '  2) Todo dia as 03:00 (padrao)\n'
-  printf '  3) A cada 6 horas\n'
-  printf '  4) Todo domingo as 03:00\n'
-  printf '  5) Cron personalizado\n'
-  read -r -p "Escolha [1/2/3/4/5]: " choice
+  printf '  2) A cada 3 horas\n'
+  printf '  3) Todo dia as 03:00 (padrao)\n'
+  printf '  4) A cada 6 horas\n'
+  printf '  5) Todo domingo as 03:00\n'
+  printf '  6) Cron personalizado\n'
+  read -r -p "Escolha [1/2/3/4/5/6]: " choice
 
   case "$choice" in
     1) CONFIG_CRON="0 * * * *" ;;
-    2|"") CONFIG_CRON="0 3 * * *" ;;
-    3) CONFIG_CRON="0 */6 * * *" ;;
-    4) CONFIG_CRON="0 3 * * 0" ;;
-    5)
+    2) CONFIG_CRON="0 */3 * * *" ;;
+    3|"") CONFIG_CRON="0 3 * * *" ;;
+    4) CONFIG_CRON="0 */6 * * *" ;;
+    5) CONFIG_CRON="0 3 * * 0" ;;
+    6)
       prompt_required "Cron personalizado (ex: 30 2 * * *): " custom_cron
       CONFIG_CRON="$custom_cron"
       ;;
@@ -360,27 +393,91 @@ prompt_cron_config() {
 }
 
 prompt_config_values() {
-  local repos
+  local repos heartbeat_urls
 
   prompt_cron_config
   prompt_required "Usuario ou org de origem no GitHub (ex: yduanrech): " CONFIG_GITHUB_OWNER
   prompt_required "Repositorio(s) de origem no GitHub, separados por espaco ou virgula: " repos
   CONFIG_GITHUB_REPOS="$(normalize_repo_list "$repos")"
   prompt_required "Usuario ou org de destino no Codeberg (ex: yduanrech): " CONFIG_CODEBERG_OWNER
+  read -r -p "Usar Healthchecks.io/heartbeat URL? (y/N): " heartbeat_urls
+  if [[ "$heartbeat_urls" =~ ^[Yy]$ ]]; then
+    prompt_required "URL(s) de heartbeat, separados por espaco ou virgula: " heartbeat_urls
+    CONFIG_HEARTBEAT_URLS="$(normalize_url_list "$heartbeat_urls")"
+  else
+    CONFIG_HEARTBEAT_URLS=""
+  fi
 
   printf '\nResumo da configuracao:\n'
   printf '  Cron: %s\n' "$CONFIG_CRON"
   printf '  GitHub origem: %s\n' "$CONFIG_GITHUB_OWNER"
   printf '  Repositorios: %s\n' "$CONFIG_GITHUB_REPOS"
   printf '  Codeberg destino: %s\n' "$CONFIG_CODEBERG_OWNER"
+  if [[ -n "$CONFIG_HEARTBEAT_URLS" ]]; then
+    printf '  Heartbeat URL(s): %s\n' "$CONFIG_HEARTBEAT_URLS"
+  else
+    printf '  Heartbeat URL(s): desabilitado\n'
+  fi
   printf '  Observacao: o Gickup usa o mesmo nome do repositorio no destino.\n'
   confirm_action "Recriar $CONF_FILE com essa configuracao? (y/N): " || die "Operacao cancelada."
+}
+
+config_values_complete() {
+  [[ -n "$CONFIG_CRON" && -n "$CONFIG_GITHUB_OWNER" && -n "$CONFIG_GITHUB_REPOS" && -n "$CONFIG_CODEBERG_OWNER" ]]
+}
+
+has_explicit_config_flags() {
+  [[ "$CONFIG_CRON" != "0 3 * * *" || "$CONFIG_GITHUB_OWNER" != "CHANGE_ME_GITHUB_USER_OR_ORG" || "$CONFIG_GITHUB_REPOS" != "CHANGE_ME_REPOSITORY_NAME" || "$CONFIG_CODEBERG_OWNER" != "CHANGE_ME_CODEBERG_USER_OR_ORG" || -n "$CONFIG_HEARTBEAT_URLS" ]]
+}
+
+parse_config_flags() {
+  # shellcheck disable=SC2178
+  local -n args_ref=$1
+  local parsed=()
+
+  while [[ ${#args_ref[@]} -gt 0 ]]; do
+    case "${args_ref[0]}" in
+      --cron)
+        [[ ${#args_ref[@]} -ge 2 ]] || die "--cron requer valor."
+        CONFIG_CRON="${args_ref[1]}"
+        args_ref=("${args_ref[@]:2}")
+        ;;
+      --github-owner)
+        [[ ${#args_ref[@]} -ge 2 ]] || die "--github-owner requer valor."
+        CONFIG_GITHUB_OWNER="${args_ref[1]}"
+        args_ref=("${args_ref[@]:2}")
+        ;;
+      --github-repos)
+        [[ ${#args_ref[@]} -ge 2 ]] || die "--github-repos requer valor."
+        CONFIG_GITHUB_REPOS="$(normalize_repo_list "${args_ref[1]}")"
+        args_ref=("${args_ref[@]:2}")
+        ;;
+      --codeberg-owner)
+        [[ ${#args_ref[@]} -ge 2 ]] || die "--codeberg-owner requer valor."
+        CONFIG_CODEBERG_OWNER="${args_ref[1]}"
+        args_ref=("${args_ref[@]:2}")
+        ;;
+      --healthchecks-url)
+        [[ ${#args_ref[@]} -ge 2 ]] || die "--healthchecks-url requer valor."
+        CONFIG_HEARTBEAT_URLS="$(normalize_url_list "${args_ref[1]}")"
+        args_ref=("${args_ref[@]:2}")
+        ;;
+      *)
+        parsed+=("${args_ref[0]}")
+        args_ref=("${args_ref[@]:1}")
+        ;;
+    esac
+  done
+
+  args_ref=("${parsed[@]}")
 }
 
 cmd_configure() {
   need_root
   ensure_service_user_and_dirs
-  prompt_config_values
+  if ! has_explicit_config_flags || ! config_values_complete; then
+    prompt_config_values
+  fi
   FORCE=true
   write_managed_file_if_needed "$CONF_FILE" "$(default_config_content)" "0640" "root" "$SERVICE_GROUP"
   fix_runtime_permissions
@@ -476,8 +573,10 @@ run_gickup_once() {
 
   set +e
   if [[ -n "$mode" ]]; then
+    # shellcheck disable=SC2016
     run_cmd runuser -u "$SERVICE_USER" -- bash -c 'set -a; . "$1"; set +a; export HOME="$2"; exec "$3" "$4" "$5"' _ "$ENV_FILE" "$STATE_DIR" "$GICKUP_BIN" "$mode" "$tmp_config"
   else
+    # shellcheck disable=SC2016
     run_cmd runuser -u "$SERVICE_USER" -- bash -c 'set -a; . "$1"; set +a; export HOME="$2"; exec "$3" "$4"' _ "$ENV_FILE" "$STATE_DIR" "$GICKUP_BIN" "$tmp_config"
   fi
   status=$?
@@ -643,6 +742,7 @@ parse_global_flags() {
 }
 
 parse_common_tail_flags() {
+  # shellcheck disable=SC2178
   local -n args_ref=$1
   local filtered=()
   local arg
@@ -677,10 +777,12 @@ main() {
 
   case "$cmd" in
     init)
+      parse_config_flags args
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para init."
       cmd_init
       ;;
     configure)
+      parse_config_flags args
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para configure."
       cmd_configure
       ;;

@@ -28,6 +28,17 @@ Modo direto:
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- init
 ```
 
+Com parâmetros de configuração no `init`:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- init \
+  --cron "0 */3 * * *" \
+  --github-owner yduanrech \
+  --github-repos "orbys" \
+  --codeberg-owner yduanrech \
+  --healthchecks-url "https://hc-ping.com/SEU-UUID"
+```
+
 O `--` após `bash -c` é necessário para passar argumentos ao script baixado.
 
 No menu interativo, o script também pode perguntar:
@@ -36,6 +47,7 @@ No menu interativo, o script também pode perguntar:
 - usuário ou organização de origem no GitHub
 - repositório(s) de origem no GitHub
 - usuário ou organização de destino no Codeberg
+- se quer configurar `heartbeat` para Healthchecks.io ou serviço compatível
 
 O Gickup cria/atualiza os repositórios no destino usando o mesmo nome da origem. Por exemplo, `github.com/yduanrech/orbys` vira `codeberg.org/yduanrech/orbys`.
 
@@ -58,6 +70,17 @@ Para recriar o `conf.yml` perguntando cron e repositórios:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- configure
+```
+
+Para recriar o `conf.yml` sem perguntas:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- configure --force \
+  --cron "0 */3 * * *" \
+  --github-owner yduanrech \
+  --github-repos "orbys" \
+  --codeberg-owner yduanrech \
+  --healthchecks-url "https://hc-ping.com/SEU-UUID"
 ```
 
 Valide antes de iniciar:
@@ -111,6 +134,7 @@ O menu de configuração oferece opções prontas:
 | Opção | Cron | Quando roda |
 | --- | --- | --- |
 | A cada 1 hora | `0 * * * *` | No minuto zero de cada hora |
+| A cada 3 horas | `0 */3 * * *` | 00:00, 03:00, 06:00, 09:00, ... |
 | Todo dia às 03:00 | `0 3 * * *` | Uma vez por dia às 03:00 |
 | A cada 6 horas | `0 */6 * * *` | 00:00, 06:00, 12:00, 18:00 |
 | Todo domingo às 03:00 | `0 3 * * 0` | Semanalmente |
@@ -207,6 +231,39 @@ Se algum token tiver caracteres especiais de shell, coloque o valor entre aspas 
 ```bash
 GICKUP_CODEBERG_TOKEN='valor-com-caracteres-especiais'
 ```
+
+## Healthchecks
+
+O script agora pode adicionar `heartbeat` no `conf.yml` para serviços como:
+
+- `https://healthchecks.io/`
+- `https://deadmanssnitch.com/`
+- qualquer endpoint compatível que aceite `GET`
+
+No menu interativo, ele pergunta se quer configurar `heartbeat`.
+
+Exemplo no YAML:
+
+```yaml
+metrics:
+  heartbeat:
+    urls:
+      - https://hc-ping.com/SEU-UUID
+```
+
+Para adicionar em uma instalação que já está funcionando, edite `/etc/gickup/conf.yml` e coloque esse bloco no nível raiz do YAML, por exemplo depois de `log:` e antes de `source:`. Depois reinicie o serviço para o Gickup reler a configuração:
+
+```bash
+systemctl restart gickup
+```
+
+Para testar sem esperar o próximo agendamento:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- run-now
+```
+
+Se você informar mais de uma URL, o Gickup faz `GET` para todas elas.
 
 ### GitHub
 
@@ -370,7 +427,7 @@ O Gickup documenta suporte a LFS para destino local e opção `lfs` em destinos 
 ## Subcomandos
 
 - `init`: instala dependências, baixa o binário, cria usuário, diretórios, config, env e service.
-- `configure`: pergunta cron, origem GitHub, repositórios e destino Codeberg, depois recria `/etc/gickup/conf.yml`.
+- `configure`: pergunta cron, origem GitHub, repositórios, destino Codeberg e heartbeat, depois recria `/etc/gickup/conf.yml`.
 - `update-binary`: atualiza apenas `/usr/local/bin/gickup`; não altera config.
 - `validate-config`: recusa placeholders e executa `gickup --dryrun` com o `cron:` removido temporariamente para validar uma execução única.
 - `run-now`: executa backup/mirror imediatamente com o `cron:` removido temporariamente.
@@ -426,6 +483,7 @@ Antes de habilitar:
 - Requer Linux `amd64`.
 - Requer execução como root.
 - O `cron:` usa o fuso horário do host.
+- `init` e `configure` aceitam flags: `--cron`, `--github-owner`, `--github-repos`, `--codeberg-owner` e `--healthchecks-url`.
 - O serviço nasce desabilitado até você rodar `enable-service`.
 - Use `--dry-run` para ver as ações sem alterar o sistema.
 - Use `--force` para recriar arquivos gerenciados existentes.
