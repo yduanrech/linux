@@ -24,6 +24,10 @@ MANAGED_MARKER="Managed by gickup-install.sh"
 DRY_RUN=false
 FORCE=false
 REMAINING_ARGS=()
+CONFIG_CRON="0 3 * * *"
+CONFIG_GITHUB_OWNER="CHANGE_ME_GITHUB_USER_OR_ORG"
+CONFIG_GITHUB_REPOS="CHANGE_ME_REPOSITORY_NAME"
+CONFIG_CODEBERG_OWNER="CHANGE_ME_CODEBERG_USER_OR_ORG"
 
 log() { printf '[INFO] %s\n' "$*"; }
 warn() { printf '[WARN] %s\n' "$*" >&2; }
@@ -37,6 +41,18 @@ confirm_action() {
   [[ "$reply" =~ ^[Yy]$ ]]
 }
 
+prompt_required() {
+  local prompt_text="$1"
+  local var_name="$2"
+  local input=""
+
+  while [[ -z "$input" ]]; do
+    read -r -p "$prompt_text" input
+    [[ -n "$input" ]] || warn "Campo obrigatorio."
+  done
+  printf -v "$var_name" '%s' "$input"
+}
+
 usage() {
   cat <<EOF
 gickup-install.sh v${VERSION}
@@ -44,8 +60,10 @@ gickup-install.sh v${VERSION}
 Uso:
   $(basename "$0")                         # menu interativo
   $(basename "$0") init [--force] [--dry-run]
+  $(basename "$0") configure [--force] [--dry-run]
   $(basename "$0") update-binary [--dry-run]
   $(basename "$0") validate-config [--dry-run]
+  $(basename "$0") run-now [--dry-run]
   $(basename "$0") enable-service [--dry-run]
   $(basename "$0") restart-service [--dry-run]
   $(basename "$0") status
@@ -53,14 +71,18 @@ Uso:
 Exemplos com curl:
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)"
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- init
+  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- configure --force
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- validate-config
+  bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- run-now
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- enable-service
   bash -c "\$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- update-binary
 
 Subcomandos:
   init             Instala dependencias, binario, usuario, diretorios, config e service
+  configure        Pergunta cron/repositorios e recria /etc/gickup/conf.yml
   update-binary    Atualiza apenas o binario /usr/local/bin/gickup
   validate-config  Valida placeholders, env e executa gickup --dryrun sem cron
+  run-now          Executa um backup/mirror agora, sem esperar o cron
   enable-service   Valida e habilita/inicia gickup.service
   restart-service  Reinicia gickup.service
   status           Mostra versao e status do servico
@@ -70,6 +92,14 @@ Opcoes globais:
   --force           Permite recriar conf/env existentes gerenciados
   -h, --help        Mostra esta ajuda
 EOF
+}
+
+repo_list_yaml() {
+  local repo
+
+  for repo in $CONFIG_GITHUB_REPOS; do
+    printf '        - %s\n' "$repo"
+  done
 }
 
 need_root() {
@@ -215,7 +245,7 @@ default_config_content() {
 # Mirror GitHub -> Codeberg usando Gickup.
 # Tokens ficam em $ENV_FILE e sao referenciados aqui pelos nomes das variaveis.
 
-cron: "0 3 * * *"
+cron: "$CONFIG_CRON"
 
 log:
   file-logging:
@@ -226,9 +256,9 @@ log:
 source:
   github:
     - token: GICKUP_GITHUB_TOKEN
-      user: CHANGE_ME_GITHUB_USER_OR_ORG
+      user: $CONFIG_GITHUB_OWNER
       include:
-        - CHANGE_ME_REPOSITORY_NAME
+$(repo_list_yaml)
       wiki: false
       issues: false
       starred: false
@@ -240,7 +270,7 @@ destination:
   gitea:
     - url: https://codeberg.org/
       token: GICKUP_CODEBERG_TOKEN
-      user: CHANGE_ME_CODEBERG_USER_OR_ORG
+      user: $CONFIG_CODEBERG_OWNER
       mirror:
         enabled: true
       visibility:
@@ -292,8 +322,69 @@ write_managed_file_if_needed() {
 
 ensure_config_files() {
   ensure_service_user_and_dirs
-  write_managed_file_if_needed "$ENV_FILE" "$(default_env_content)" "0600" "root" "root"
+  write_managed_file_if_needed "$ENV_FILE" "$(default_env_content)" "0640" "root" "$SERVICE_GROUP"
   write_managed_file_if_needed "$CONF_FILE" "$(default_config_content)" "0640" "root" "$SERVICE_GROUP"
+  fix_runtime_permissions
+}
+
+normalize_repo_list() {
+  local value="$1"
+
+  value="${value//,/ }"
+  # shellcheck disable=SC2086
+  printf '%s' $value
+}
+
+prompt_cron_config() {
+  local choice custom_cron
+
+  printf '\nAgendamento do Gickup:\n'
+  printf '  1) A cada 1 hora\n'
+  printf '  2) Todo dia as 03:00 (padrao)\n'
+  printf '  3) A cada 6 horas\n'
+  printf '  4) Todo domingo as 03:00\n'
+  printf '  5) Cron personalizado\n'
+  read -r -p "Escolha [1/2/3/4/5]: " choice
+
+  case "$choice" in
+    1) CONFIG_CRON="0 * * * *" ;;
+    2|"") CONFIG_CRON="0 3 * * *" ;;
+    3) CONFIG_CRON="0 */6 * * *" ;;
+    4) CONFIG_CRON="0 3 * * 0" ;;
+    5)
+      prompt_required "Cron personalizado (ex: 30 2 * * *): " custom_cron
+      CONFIG_CRON="$custom_cron"
+      ;;
+    *) die "Opcao invalida." ;;
+  esac
+}
+
+prompt_config_values() {
+  local repos
+
+  prompt_cron_config
+  prompt_required "Usuario ou org de origem no GitHub (ex: yduanrech): " CONFIG_GITHUB_OWNER
+  prompt_required "Repositorio(s) de origem no GitHub, separados por espaco ou virgula: " repos
+  CONFIG_GITHUB_REPOS="$(normalize_repo_list "$repos")"
+  prompt_required "Usuario ou org de destino no Codeberg (ex: yduanrech): " CONFIG_CODEBERG_OWNER
+
+  printf '\nResumo da configuracao:\n'
+  printf '  Cron: %s\n' "$CONFIG_CRON"
+  printf '  GitHub origem: %s\n' "$CONFIG_GITHUB_OWNER"
+  printf '  Repositorios: %s\n' "$CONFIG_GITHUB_REPOS"
+  printf '  Codeberg destino: %s\n' "$CONFIG_CODEBERG_OWNER"
+  printf '  Observacao: o Gickup usa o mesmo nome do repositorio no destino.\n'
+  confirm_action "Recriar $CONF_FILE com essa configuracao? (y/N): " || die "Operacao cancelada."
+}
+
+cmd_configure() {
+  need_root
+  ensure_service_user_and_dirs
+  prompt_config_values
+  FORCE=true
+  write_managed_file_if_needed "$CONF_FILE" "$(default_config_content)" "0640" "root" "$SERVICE_GROUP"
+  fix_runtime_permissions
+  log "Configuracao recriada em $CONF_FILE. Edite $ENV_FILE com os tokens antes de validar/iniciar."
 }
 
 service_content() {
@@ -339,11 +430,23 @@ check_no_placeholders() {
   fi
 }
 
-validate_config() {
-  local tmp_config
+fix_runtime_permissions() {
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log "[DRY-RUN] ajustaria permissoes em $LOG_DIR e $LOCAL_BACKUP_DIR para $SERVICE_USER:$SERVICE_GROUP"
+    return 0
+  fi
 
+  chown -R "$SERVICE_USER:$SERVICE_GROUP" "$LOG_DIR" "$LOCAL_BACKUP_DIR"
+  chmod 0750 "$LOG_DIR" "$LOCAL_BACKUP_DIR"
+  if [[ -f "$LOG_DIR/gickup.log" ]]; then
+    chmod 0640 "$LOG_DIR/gickup.log"
+  fi
+}
+
+validate_config() {
   need_root
   [[ -x "$GICKUP_BIN" ]] || die "Gickup nao encontrado em $GICKUP_BIN. Rode init primeiro."
+  ensure_service_user_and_dirs
   check_no_placeholders "$ENV_FILE"
   check_no_placeholders "$CONF_FILE"
 
@@ -351,22 +454,38 @@ validate_config() {
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
-  [[ -n "${GICKUP_GITHUB_TOKEN:-}" ]] || die "GICKUP_GITHUB_TOKEN vazio em $ENV_FILE."
-  [[ -n "${GICKUP_CODEBERG_TOKEN:-}" ]] || die "GICKUP_CODEBERG_TOKEN vazio em $ENV_FILE."
 
   if [[ "$DRY_RUN" == "true" ]]; then
     log "[DRY-RUN] executaria $GICKUP_BIN --dryrun com cron removido temporariamente"
     return 0
   fi
 
-  tmp_config="$(mktemp)"
-  sed '/^[[:space:]]*cron:/d' "$CONF_FILE" > "$tmp_config"
-
   log "Validando config com gickup --dryrun..."
-  (
-    timeout 120 "$GICKUP_BIN" --dryrun "$tmp_config"
-  )
+  run_gickup_once "--dryrun"
+  fix_runtime_permissions
+}
+
+run_gickup_once() {
+  local mode="${1:-}"
+  local tmp_config status
+
+  tmp_config="$(mktemp --tmpdir="$STATE_DIR" gickup-conf.XXXXXX.yml)"
+  sed '/^[[:space:]]*cron:/d' "$CONF_FILE" > "$tmp_config"
+  chown "$SERVICE_USER:$SERVICE_GROUP" "$tmp_config"
+  chmod 0640 "$tmp_config"
+
+  set +e
+  if [[ -n "$mode" ]]; then
+    run_cmd runuser -u "$SERVICE_USER" -- bash -c 'set -a; . "$1"; set +a; export HOME="$2"; exec "$3" "$4" "$5"' _ "$ENV_FILE" "$STATE_DIR" "$GICKUP_BIN" "$mode" "$tmp_config"
+  else
+    run_cmd runuser -u "$SERVICE_USER" -- bash -c 'set -a; . "$1"; set +a; export HOME="$2"; exec "$3" "$4"' _ "$ENV_FILE" "$STATE_DIR" "$GICKUP_BIN" "$tmp_config"
+  fi
+  status=$?
+  set -e
+
   rm -f "$tmp_config"
+  fix_runtime_permissions
+  return "$status"
 }
 
 cmd_init() {
@@ -383,9 +502,30 @@ cmd_update_binary() {
   log "Binario atualizado. Reinicie o servico para usar a nova versao se ele estiver ativo."
 }
 
+cmd_run_now() {
+  need_root
+  [[ -x "$GICKUP_BIN" ]] || die "Gickup nao encontrado em $GICKUP_BIN. Rode init primeiro."
+  ensure_service_user_and_dirs
+  check_no_placeholders "$ENV_FILE"
+  check_no_placeholders "$CONF_FILE"
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+
+  if [[ "$DRY_RUN" == "true" ]]; then
+    log "[DRY-RUN] executaria backup/mirror agora com cron removido temporariamente"
+    return 0
+  fi
+
+  log "Executando backup/mirror agora..."
+  run_gickup_once
+}
+
 cmd_enable_service() {
   need_root
   validate_config
+  fix_runtime_permissions
   run_cmd systemctl enable --now gickup.service
   log "Servico gickup habilitado/iniciado."
 }
@@ -393,6 +533,7 @@ cmd_enable_service() {
 cmd_restart_service() {
   need_root
   validate_config
+  fix_runtime_permissions
   run_cmd systemctl restart gickup.service
   log "Servico gickup reiniciado."
 }
@@ -420,12 +561,14 @@ menu() {
     [[ "$DRY_RUN" == "true" ]] && printf ' [DRY-RUN]\n'
     printf '=======================================\n'
     printf ' 1) Init / instalar base\n'
-    printf ' 2) Atualizar binario\n'
-    printf ' 3) Validar config\n'
-    printf ' 4) Habilitar/iniciar servico\n'
-    printf ' 5) Reiniciar servico\n'
-    printf ' 6) Ver status/versao\n'
-    printf ' 7) Ajuda\n'
+    printf ' 2) Configurar cron/repositorios\n'
+    printf ' 3) Atualizar binario\n'
+    printf ' 4) Validar config\n'
+    printf ' 5) Executar agora\n'
+    printf ' 6) Habilitar/iniciar servico\n'
+    printf ' 7) Reiniciar servico\n'
+    printf ' 8) Ver status/versao\n'
+    printf ' 9) Ajuda\n'
     printf ' 0) Sair\n'
     printf '\n'
     read -r -p "Escolha: " choice
@@ -434,26 +577,36 @@ menu() {
       1)
         confirm_action "Instalar/atualizar base do Gickup? (y/N): " || die "Operacao cancelada."
         cmd_init
+        if confirm_action "Configurar cron/repositorios agora? (y/N): "; then
+          cmd_configure
+        fi
         ;;
       2)
+        cmd_configure
+        ;;
+      3)
         confirm_action "Atualizar apenas o binario do Gickup? (y/N): " || die "Operacao cancelada."
         cmd_update_binary
         ;;
-      3)
+      4)
         cmd_validate_config
         ;;
-      4)
+      5)
+        confirm_action "Executar backup/mirror agora? (y/N): " || die "Operacao cancelada."
+        cmd_run_now
+        ;;
+      6)
         confirm_action "Validar config e habilitar/iniciar gickup.service? (y/N): " || die "Operacao cancelada."
         cmd_enable_service
         ;;
-      5)
+      7)
         confirm_action "Validar config e reiniciar gickup.service? (y/N): " || die "Operacao cancelada."
         cmd_restart_service
         ;;
-      6)
+      8)
         cmd_status
         ;;
-      7)
+      9)
         usage
         ;;
       0)
@@ -527,6 +680,10 @@ main() {
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para init."
       cmd_init
       ;;
+    configure)
+      [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para configure."
+      cmd_configure
+      ;;
     update-binary)
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para update-binary."
       cmd_update_binary
@@ -534,6 +691,10 @@ main() {
     validate-config)
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para validate-config."
       cmd_validate_config
+      ;;
+    run-now)
+      [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para run-now."
+      cmd_run_now
       ;;
     enable-service)
       [[ ${#args[@]} -eq 0 ]] || die "Argumentos invalidos para enable-service."

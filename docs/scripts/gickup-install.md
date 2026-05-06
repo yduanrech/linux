@@ -2,6 +2,8 @@
 
 Instala e atualiza o `gickup` em Linux `amd64`, cria uma configuração base para mirror GitHub -> Codeberg e prepara um serviço `systemd` para manter o processo rodando.
 
+O template inicial é opinativo para GitHub -> Codeberg porque esse é o fluxo mais comum deste repositório. O script não limita o Gickup a esses serviços: depois do `init`, você pode editar `/etc/gickup/conf.yml` e usar qualquer `source` ou `destination` suportado pelo Gickup.
+
 O Gickup usa o `cron:` dentro do `conf.yml` para agendar execuções. O `systemd` criado por este script não agenda o backup; ele apenas inicia o Gickup no boot, mantém o processo ativo e reinicia em caso de falha.
 
 Referências principais:
@@ -28,6 +30,15 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/hea
 
 O `--` após `bash -c` é necessário para passar argumentos ao script baixado.
 
+No menu interativo, o script também pode perguntar:
+
+- qual agendamento `cron` usar
+- usuário ou organização de origem no GitHub
+- repositório(s) de origem no GitHub
+- usuário ou organização de destino no Codeberg
+
+O Gickup cria/atualiza os repositórios no destino usando o mesmo nome da origem. Por exemplo, `github.com/yduanrech/orbys` vira `codeberg.org/yduanrech/orbys`.
+
 ## Fluxo recomendado
 
 Primeira execução:
@@ -43,6 +54,12 @@ nano /etc/gickup/gickup.env
 nano /etc/gickup/conf.yml
 ```
 
+Para recriar o `conf.yml` perguntando cron e repositórios:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- configure
+```
+
 Valide antes de iniciar:
 
 ```bash
@@ -53,6 +70,12 @@ Habilite o serviço:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- enable-service
+```
+
+Forçar uma execução agora, sem esperar o próximo `cron`:
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)" -- run-now
 ```
 
 Ver status:
@@ -79,6 +102,22 @@ O `init` faz:
 
 O serviço não é habilitado automaticamente no `init`. Isso evita iniciar o Gickup com placeholders ou tokens ausentes.
 
+Durante `validate-config`, o Gickup pode criar o arquivo de log como `root` porque a validação roda com privilégios administrativos. O script corrige o dono de `/var/log/gickup` e `/var/backups/gickup` de volta para `gickup:gickup` antes de iniciar ou reiniciar o serviço.
+
+## Agendamento
+
+O menu de configuração oferece opções prontas:
+
+| Opção | Cron | Quando roda |
+| --- | --- | --- |
+| A cada 1 hora | `0 * * * *` | No minuto zero de cada hora |
+| Todo dia às 03:00 | `0 3 * * *` | Uma vez por dia às 03:00 |
+| A cada 6 horas | `0 */6 * * *` | 00:00, 06:00, 12:00, 18:00 |
+| Todo domingo às 03:00 | `0 3 * * 0` | Semanalmente |
+| Personalizado | informado no prompt | Conforme expressão cron |
+
+O horário usa o fuso horário do host.
+
 ## Arquivos criados
 
 | Caminho | Função | Permissão |
@@ -86,7 +125,7 @@ O serviço não é habilitado automaticamente no `init`. Isso evita iniciar o Gi
 | `/usr/local/bin/gickup` | Binário do Gickup | `0755 root:root` |
 | `/usr/local/bin/gickup.bak` | Backup do binário anterior, quando existir | `0755 root:root` |
 | `/etc/gickup/conf.yml` | Configuração principal do Gickup | `0640 root:gickup` |
-| `/etc/gickup/gickup.env` | Tokens como variáveis de ambiente | `0600 root:root` |
+| `/etc/gickup/gickup.env` | Tokens como variáveis de ambiente | `0640 root:gickup` |
 | `/etc/systemd/system/gickup.service` | Serviço systemd | `0644 root:root` |
 | `/var/lib/gickup` | HOME/estado do serviço | `0750 gickup:gickup` |
 | `/var/log/gickup` | Logs do Gickup | `0750 gickup:gickup` |
@@ -207,11 +246,42 @@ O blog do Gickup recomenda `mirror.enabled: true` para Codeberg porque o mirror 
 
 Sobre permissões:
 
-- o token precisa conseguir criar/atualizar repositórios no destino
+- o token precisa ter `read:user`
+- o token precisa ter `write:repository` para criar/atualizar repositórios no destino
 - se o destino for um usuário, o token normalmente é do próprio usuário
-- se o destino for uma organização, prefira um usuário/bot dedicado no Codeberg
+- se o destino for uma organização, prefira um usuário/bot dedicado no Codeberg e adicione também permissão de organização quando a UI/API exigir
 - conceda a esse usuário/bot apenas acesso aos repositórios ou à organização de destino
 - se o token vazar, revogue e gere outro
+
+Crie o token em:
+
+```text
+https://codeberg.org/user/settings/applications
+```
+
+Permissões mínimas para este fluxo:
+
+| Permissão | Valor |
+| --- | --- |
+| `repository` | Ler e escrever |
+| `user` | Ler |
+
+Para o erro:
+
+```text
+token does not have at least one of required scope(s): [read:user]
+```
+
+O problema está no token usado em `GICKUP_CODEBERG_TOKEN`, não no token GitHub. Recrie ou edite o token no Codeberg/Forgejo com pelo menos:
+
+```text
+read:user
+write:repository
+```
+
+`write:repository` já inclui leitura de repositório. Se o destino for uma organização e o Gickup precisar consultar/criar dentro dela, adicione também o escopo de organização correspondente.
+
+Atenção: no Codeberg/Forgejo, tokens com **repositórios específicos selecionados** só podem usar escopos de issue e repository. Como o Gickup também precisa de `read:user`, não use a restrição por repositório específico para este token. Para reduzir o risco, use uma conta dedicada no Codeberg e dê a ela acesso apenas ao destino necessário.
 
 A documentação do Codeberg sobre access tokens informa que tokens dão acesso à conta. Para menor privilégio real, use uma conta dedicada e controle o acesso dessa conta via permissões de repositório, colaborador ou equipe.
 
@@ -268,6 +338,22 @@ destination:
       lfs: false
 ```
 
+## Outros providers
+
+O script cria apenas um template GitHub -> Codeberg. Para outros cenários, edite `/etc/gickup/conf.yml` conforme a documentação do Gickup.
+
+Exemplos de mudança:
+
+- GitHub -> backup local: remova `destination.gitea` e habilite `destination.local`.
+- GitHub -> outro Gitea: mantenha `destination.gitea`, mas troque `url`, `token` e `user`.
+- GitLab/Gitea/Codeberg como origem: troque `source.github` pelo bloco de origem suportado pelo Gickup.
+
+O serviço `systemd` continua igual, porque ele só executa:
+
+```bash
+/usr/local/bin/gickup /etc/gickup/conf.yml
+```
+
 ## Git LFS
 
 Seu repositório atual não usa LFS, então o template deixa `lfs: false`.
@@ -284,8 +370,10 @@ O Gickup documenta suporte a LFS para destino local e opção `lfs` em destinos 
 ## Subcomandos
 
 - `init`: instala dependências, baixa o binário, cria usuário, diretórios, config, env e service.
+- `configure`: pergunta cron, origem GitHub, repositórios e destino Codeberg, depois recria `/etc/gickup/conf.yml`.
 - `update-binary`: atualiza apenas `/usr/local/bin/gickup`; não altera config.
 - `validate-config`: recusa placeholders e executa `gickup --dryrun` com o `cron:` removido temporariamente para validar uma execução única.
+- `run-now`: executa backup/mirror imediatamente com o `cron:` removido temporariamente.
 - `enable-service`: valida e roda `systemctl enable --now gickup.service`.
 - `restart-service`: valida e reinicia `gickup.service`.
 - `status`: mostra versão do Gickup e status do serviço.
@@ -326,6 +414,8 @@ Antes de habilitar:
 - [ ] token GitHub é fine-grained e só acessa os repositórios necessários
 - [ ] token GitHub tem `Contents: Read-only`
 - [ ] token Codeberg pertence ao usuário/conta correta
+- [ ] token Codeberg tem `read:user`
+- [ ] token Codeberg tem `write:repository`
 - [ ] usuário/conta Codeberg tem permissão de escrita no destino
 - [ ] `include` lista apenas os repositórios desejados
 - [ ] `validate-config` passou
