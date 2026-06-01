@@ -1,24 +1,28 @@
 # Linux Scripts
 
-Scripts de automação para Ubuntu/Debian (setup inicial, updates, observabilidade e utilitários).
+[Portuguese (Brazil)](./README.pt-BR.md)
 
-## Resumo Rápido
+Automation scripts for Ubuntu/Debian covering initial setup, updates, observability, and utilities.
 
-| Script | Função | Execução |
+## Quick Overview
+
+| Script | Purpose | Run |
 |---|---|---|
-| `initial-settings.sh` | Menu de configuração inicial (timezone, locale, SSH, journald, autologout, unattended-upgrades) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/initial-settings.sh)"` |
-| `unattended-upgrades-install.sh` | Configura unattended-upgrades com ou sem envio de e-mail | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/unattended-upgrades-install.sh)"` |
-| `qemu-agent-install.sh` | Instala e habilita `qemu-guest-agent` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/qemu-agent-install.sh)"` |
-| `btop-install.sh` | Instala `btop` (x86_64/aarch64) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/btop-install.sh)"` |
-| `caddy-acme-install.sh` | Instala Caddy oficial + acme.sh ou apenas acme.sh para outros servidores web com Cloudflare DNS-01 | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)"` |
-| `n8n-install.sh` | Instala/atualiza `n8n` com serviço systemd | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/n8n-install.sh)"` |
-| `gickup-install.sh` | Instala/atualiza Gickup linux amd64 para mirror GitHub -> Codeberg com systemd | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)"` |
-| `individuais/autologout-install.sh` | Configura autologout global (`TMOUT=900`) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/autologout-install.sh)"` |
-| `individuais/limit-journal.sh` | Ajusta retenção e tamanho do `journald` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/limit-journal.sh)"` |
-| `mariadb-backup/mariadb_backup.sh` | Backup lógico MariaDB com envio opcional ao PBS | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/mariadb-backup/mariadb_backup.sh)"` |
-| `fix/fix-unattended-upgrades.sh` | Corrige unattended-upgrades em servidores existentes (reboot-with-users, periodic, cronjob) | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/fix/fix-unattended-upgrades.sh)"` |
+| `initial-settings.sh` | Initial setup menu for timezone, locale, SSH, journald, autologout, and unattended-upgrades | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/initial-settings.sh)"` |
+| `unattended-upgrades-install.sh` | Configures unattended-upgrades with or without email notifications | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/unattended-upgrades-install.sh)"` |
+| `qemu-agent-install.sh` | Installs and enables `qemu-guest-agent` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/qemu-agent-install.sh)"` |
+| `btop-install.sh` | Installs `btop` for `x86_64` and `aarch64` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/btop-install.sh)"` |
+| `caddy-acme-install.sh` | Installs the official Caddy package plus `acme.sh`, or only `acme.sh` for other web servers using Cloudflare DNS-01 | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/caddy-acme-install.sh)"` |
+| `n8n-install.sh` | Installs or updates `n8n` with a systemd service | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/n8n-install.sh)"` |
+| `gickup-install.sh` | Installs or updates Gickup for Linux amd64 to mirror GitHub to Codeberg with systemd | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/gickup-install.sh)"` |
+| `individuais/autologout-install.sh` | Configures global autologout with `TMOUT=900` | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/autologout-install.sh)"` |
+| `individuais/limit-journal.sh` | Adjusts `journald` retention and size | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/individuais/limit-journal.sh)"` |
+| `mariadb-backup/mariadb_backup.sh` | Runs logical MariaDB backups with optional PBS upload | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/mariadb-backup/mariadb_backup.sh)"` |
+| `fix/fix-unattended-upgrades.sh` | Fixes unattended-upgrades on existing servers, including `reboot-with-users`, periodic settings, and cronjob configuration | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/yduanrech/linux/refs/heads/main/fix/fix-unattended-upgrades.sh)"` |
 
-## Documentação por Script
+## Script Documentation
+
+Detailed script documentation is available in `docs/scripts/`:
 
 - `docs/scripts/initial-settings.md`
 - `docs/scripts/unattended-upgrades-install.md`
@@ -33,9 +37,9 @@ Scripts de automação para Ubuntu/Debian (setup inicial, updates, observabilida
 
 ## Extras
 
-- `caddy/examples/`: exemplos de `Caddyfile` para PVE, PBS, UniFi, Uptime Kuma e n8n
+- `caddy/examples/`: sample `Caddyfile` configurations for PVE, PBS, UniFi, Uptime Kuma, and n8n
 
-## Notas
+## Notes
 
-- A maior parte dos scripts exige `root` (`sudo`).
-- Os scripts foram escritos para Ubuntu/Debian.
+- Most scripts require `root` via `sudo`.
+- The scripts target Ubuntu/Debian systems.
